@@ -48,6 +48,7 @@ export default function GameCanvas() {
   const [connected, setConnected] = useState(false);
   const router = useRouter();
   const redirectedRef = useRef(false);
+  const [myScore, setMyScore] = useState(0);
 
   useEffect(() => {
     const mount = mountRef.current!;
@@ -540,7 +541,7 @@ export default function GameCanvas() {
     socket.on("player:score", ({ id, score }: { id: string; score: number }) => {
       const e = otherPlayers.get(id);
       if (id === socket.id) {
-        // could be used for UI later
+        setMyScore(score);
       }
       if (e) {
         e.score = score;
@@ -778,6 +779,9 @@ export default function GameCanvas() {
           Connecting to server...
         </div>
       )}
+      <div className="absolute top-14 right-3 text-xs bg-sky-100 text-sky-900 px-2 py-1 rounded">
+        Score: {myScore}
+      </div>
     </div>
   );
 }
