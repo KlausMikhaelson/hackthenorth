@@ -99,19 +99,35 @@ export default function StorePage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-slate-100">
-      <main className="mx-auto max-w-6xl px-6 py-12">
+    <div className="relative min-h-screen w-full bg-gradient-to-b from-amber-950 via-amber-900 to-amber-950 text-amber-100">
+      {/* Ambient fall glow */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 opacity-30">
+        <div className="absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.35),transparent_60%)]" />
+        <div className="absolute top-1/3 -right-24 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,rgba(244,114,182,0.25),transparent_60%)]" />
+        <div className="absolute bottom-0 left-1/4 h-64 w-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.18),transparent_60%)]" />
+      </div>
+
+      {/* Falling leaves overlay */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="leaf" style={{ left: "10%", animationDelay: "-0.4s", fontSize: "16px" }}>🍁</div>
+        <div className="leaf" style={{ left: "28%", animationDelay: "-1.0s", fontSize: "14px" }}>🍂</div>
+        <div className="leaf" style={{ left: "50%", animationDelay: "-0.7s", fontSize: "18px" }}>🍁</div>
+        <div className="leaf" style={{ left: "66%", animationDelay: "-1.4s", fontSize: "12px" }}>🍂</div>
+        <div className="leaf" style={{ left: "82%", animationDelay: "-0.2s", fontSize: "20px" }}>🍃</div>
+      </div>
+
+      <main className="relative z-10 mx-auto max-w-6xl px-6 py-12">
         <div className="flex items-center justify-between mb-6">
-          <div className="text-sm">
+          <div className="text-sm text-amber-300/90">
             <Link href="/" className="underline">Home</Link>
             <span className="mx-2">/</span>
             <span>Store</span>
           </div>
-          <Link href="/game" className="text-sm underline">Back to Game</Link>
+          <Link href="/game" className="text-sm underline text-amber-300/90">Back to Game</Link>
         </div>
 
         {!address ? (
-          <div className="text-sm text-slate-300">No wallet found. Please sign up first.</div>
+          <div className="text-sm text-amber-200/90">No wallet found. Please sign up first.</div>
         ) : (
           <div className="space-y-10">
             <section>
@@ -120,13 +136,13 @@ export default function StorePage() {
                 {options.map((t) => {
                   const active = assets?.selectedTexture === t.id;
                   return (
-                    <button key={t.id} onClick={() => selectTexture(t.id)} className={`rounded-xl overflow-hidden border ${active ? "border-sky-400" : "border-slate-700"} bg-slate-800/50 hover:border-slate-500 text-left`}>
+                    <button key={t.id} onClick={() => selectTexture(t.id)} className={`rounded-xl overflow-hidden border ${active ? "border-amber-400" : "border-amber-800"} bg-amber-900/40 hover:border-amber-700 text-left`}>
                       <div className="relative w-full h-40">
                         <Image src={t.src} alt={t.label} fill className="object-cover" />
                       </div>
                       <div className="p-3 flex items-center justify-between text-sm">
                         <span>{t.label}</span>
-                        {active && <span className="text-sky-400">Selected</span>}
+                        {active && <span className="text-amber-400">Selected</span>}
                       </div>
                     </button>
                   );
@@ -140,7 +156,7 @@ export default function StorePage() {
                 {TANK_TYPES.map((k) => {
                   const active = assets?.selectedTankType === k.id;
                   return (
-                    <button key={k.id} onClick={() => selectTankType(k.id)} className={`rounded-md px-4 py-2 border ${active ? "border-sky-400 bg-sky-500/10" : "border-slate-700 bg-slate-800/50"} hover:border-slate-500`}>
+                    <button key={k.id} onClick={() => selectTankType(k.id)} className={`rounded-md px-4 py-2 border ${active ? "border-amber-400 bg-amber-500/10" : "border-amber-800 bg-amber-900/40"} hover:border-amber-700`}>
                       {k.label}
                     </button>
                   );
@@ -148,11 +164,27 @@ export default function StorePage() {
               </div>
             </section>
 
-            <div className="text-xs text-slate-400">Address: {address}</div>
-            {saving && <div className="text-sm text-slate-300">Saving...</div>}
+            <div className="text-xs text-amber-300/80">Address: {address}</div>
+            {saving && <div className="text-sm text-amber-200/90">Saving...</div>}
           </div>
         )}
       </main>
+
+      {/* Page-scoped styles for falling leaves */}
+      <style jsx>{`
+        .leaf {
+          position: absolute;
+          top: -10%;
+          animation: fall 12s linear infinite;
+          opacity: 0.7;
+          filter: drop-shadow(0 2px 2px rgba(0,0,0,0.25));
+        }
+        @keyframes fall {
+          0% { transform: translate3d(0,-10%,0) rotate(0deg); }
+          50% { transform: translate3d(-20px,50vh,0) rotate(180deg); }
+          100% { transform: translate3d(20px,105vh,0) rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

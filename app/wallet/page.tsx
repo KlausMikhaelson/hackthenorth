@@ -75,37 +75,71 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm"><Link href="/" className="underline">Home</Link> <span className="mx-2">/</span> Wallet</div>
-        <Link className="text-sm underline" href="/game">Back to Game</Link>
+    <div className="relative min-h-screen w-full bg-gradient-to-b from-amber-950 via-amber-900 to-amber-950 text-amber-100">
+      {/* Ambient fall glow */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 opacity-30">
+        <div className="absolute -top-24 -left-24 h-80 w-80 rounded-full bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.35),transparent_60%)]" />
+        <div className="absolute top-1/3 -right-24 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,rgba(244,114,182,0.25),transparent_60%)]" />
+        <div className="absolute bottom-0 left-1/4 h-64 w-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.18),transparent_60%)]" />
       </div>
 
-      <div className="space-y-3 max-w-2xl">
-        <div className="space-y-2">
-          <label className="block text-sm font-medium">XRPL WebSocket URL</label>
-          <div className="flex gap-2">
-            <input className="border px-2 py-1 flex-1" value={network} onChange={(e)=>setNetwork(e.target.value)} />
-            <button onClick={saveNetwork} className="border px-3 py-1">Save</button>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <button onClick={generate} className="border px-3 py-1">Generate Wallet</button>
-            <button onClick={refresh} disabled={connecting || !address} className="border px-3 py-1">{connecting ? "Connecting..." : "Refresh"}</button>
-          </div>
-          <div className="text-xs text-gray-600">Seed is stored in your browser localStorage only.</div>
-        </div>
-
-        <div className="space-y-1">
-          <div className="text-sm"><span className="font-medium">Seed:</span> {seed || "-"}</div>
-          <div className="text-sm"><span className="font-medium">Address:</span> {address || "-"}</div>
-          <div className="text-sm"><span className="font-medium">X-Address:</span> {xAddress || "-"}</div>
-          <div className="text-sm"><span className="font-medium">Balance:</span> {balanceXrp} XRP</div>
-          <div className="text-sm"><span className="font-medium">Reserve:</span> {reserveXrp} XRP</div>
-        </div>
+      {/* Falling leaves overlay */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="leaf" style={{ left: "12%", animationDelay: "-0.4s", fontSize: "16px" }}>🍁</div>
+        <div className="leaf" style={{ left: "32%", animationDelay: "-0.9s", fontSize: "14px" }}>🍂</div>
+        <div className="leaf" style={{ left: "54%", animationDelay: "-1.3s", fontSize: "18px" }}>🍁</div>
+        <div className="leaf" style={{ left: "72%", animationDelay: "-0.2s", fontSize: "12px" }}>🍂</div>
+        <div className="leaf" style={{ left: "88%", animationDelay: "-0.7s", fontSize: "20px" }}>🍃</div>
       </div>
+
+      <main className="relative z-10 mx-auto max-w-5xl px-6 py-10 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-amber-300/90"><Link href="/" className="underline">Home</Link> <span className="mx-2">/</span> Wallet</div>
+          <Link className="text-sm underline text-amber-300/90" href="/game">Back to Game</Link>
+        </div>
+
+        <div className="space-y-3 max-w-2xl">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">XRPL WebSocket URL</label>
+            <div className="flex gap-2">
+              <input className="border border-amber-800 bg-amber-900/40 px-3 py-2 rounded-md flex-1 placeholder:text-amber-300/60" value={network} onChange={(e)=>setNetwork(e.target.value)} />
+              <button onClick={saveNetwork} className="border border-amber-800 hover:border-amber-700 bg-amber-900/40 px-4 py-2 rounded-md">Save</button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <button onClick={generate} className="border border-amber-800 hover:border-amber-700 bg-amber-900/40 px-4 py-2 rounded-md">Generate Wallet</button>
+              <button onClick={refresh} disabled={connecting || !address} className="border border-amber-800 hover:border-amber-700 disabled:opacity-60 bg-amber-900/40 px-4 py-2 rounded-md">{connecting ? "Connecting..." : "Refresh"}</button>
+            </div>
+            <div className="text-xs text-amber-300/80">Seed is stored in your browser localStorage only.</div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-sm"><span className="font-medium">Seed:</span> {seed || "-"}</div>
+            <div className="text-sm"><span className="font-medium">Address:</span> {address || "-"}</div>
+            <div className="text-sm"><span className="font-medium">X-Address:</span> {xAddress || "-"}</div>
+            <div className="text-sm"><span className="font-medium">Balance:</span> {balanceXrp} XRP</div>
+            <div className="text-sm"><span className="font-medium">Reserve:</span> {reserveXrp} XRP</div>
+          </div>
+        </div>
+      </main>
+
+      {/* Page-scoped styles for falling leaves */}
+      <style jsx>{`
+        .leaf {
+          position: absolute;
+          top: -10%;
+          animation: fall 12s linear infinite;
+          opacity: 0.7;
+          filter: drop-shadow(0 2px 2px rgba(0,0,0,0.25));
+        }
+        @keyframes fall {
+          0% { transform: translate3d(0,-10%,0) rotate(0deg); }
+          50% { transform: translate3d(-20px,50vh,0) rotate(180deg); }
+          100% { transform: translate3d(20px,105vh,0) rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
