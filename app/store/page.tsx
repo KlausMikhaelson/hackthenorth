@@ -151,9 +151,15 @@ export default function StorePage() {
                     <button key={t.id} onClick={() => selectTexture(t.id)} className={`rounded-xl overflow-hidden border ${active ? "border-amber-400" : "border-amber-800"} bg-amber-900/40 hover:border-amber-700 text-left`}>
                       <div className="relative w-full h-40">
                         <Image src={t.src} alt={t.label} fill className="object-cover" />
+                        <div className="absolute top-2 left-2 text-[11px]">
+                          <span className="inline-flex items-center rounded-full border border-amber-800 bg-amber-900/70 px-2 py-0.5">1 XRLUSD</span>
+                        </div>
                       </div>
                       <div className="p-3 flex items-center justify-between text-sm">
-                        <span>{t.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center rounded-full border border-amber-800 bg-amber-900/40 px-2 py-0.5 text-[11px]">1 XRLUSD</span>
+                          <span>{t.label}</span>
+                        </div>
                         {active && <span className="text-amber-400">Selected</span>}
                       </div>
                     </button>

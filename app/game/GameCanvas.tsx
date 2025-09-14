@@ -49,6 +49,7 @@ export default function GameCanvas() {
   const router = useRouter();
   const redirectedRef = useRef(false);
   const [myScore, setMyScore] = useState(0);
+  const hadMultiplePlayersRef = useRef(false);
 
   useEffect(() => {
     const mount = mountRef.current!;
@@ -398,8 +399,8 @@ export default function GameCanvas() {
       try {
         const addr = localStorage.getItem("wallet_address");
         if (!addr) return;
-        // const apiBase = "https://hackthenorth.onrender.com";
-        const apiBase = 'http://localhost:3002';
+        const apiBase = "https://hackthenorth.onrender.com";
+        // const apiBase = 'http://localhost:3002';
         const res = await fetch(`${apiBase}/api/user/byAddress/${addr}`);
         if (res.ok) {
           const data = await res.json();
@@ -449,6 +450,9 @@ export default function GameCanvas() {
           }
         }
       });
+      // Track if the room has ever had 2+ players
+      const totalPlayersNow = otherPlayers.size + 1; // me + others
+      if (totalPlayersNow >= 2) hadMultiplePlayersRef.current = true;
     });
 
     socket.on("player:join", (p: PlayerState) => {
@@ -473,6 +477,9 @@ export default function GameCanvas() {
           entity.textureSrc = p.textureSrc;
         }
       }
+      // Mark that a match is active when we reach 2+ players
+      const totalPlayersNow = otherPlayers.size + 1;
+      if (totalPlayersNow >= 2) hadMultiplePlayersRef.current = true;
     });
 
     socket.on("player:update", (payload: PlayerState) => {
@@ -510,6 +517,12 @@ export default function GameCanvas() {
         scene.remove(entity.healthBarBg);
         scene.remove(entity.healthBarFg);
         otherPlayers.delete(id);
+      }
+      // If we previously had 2+ players and now only 1 remains (me), declare win
+      const totalPlayersNow = otherPlayers.size + 1;
+      if (!redirectedRef.current && hadMultiplePlayersRef.current && totalPlayersNow === 1) {
+        redirectedRef.current = true;
+        router.push("/winner?msg=" + encodeURIComponent("You won! Escrow will release the prize to your account soon."));
       }
     });
 
