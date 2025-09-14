@@ -7,11 +7,16 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "socket.io": "^4.8.1"
+    "@prisma/client": "^6.16.1",
+    "axios": "^1.12.1",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "prisma": "^6.16.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "xrpl": "^4.4.1"
   },
   "engines": {
     "node": ">=18.18.0"
   }
 }
-
-

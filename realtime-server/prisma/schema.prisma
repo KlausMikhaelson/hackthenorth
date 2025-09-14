@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id            String   @id @default(uuid())
+  xrplAddress   String   @unique @map("xrpl_address")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("players")
+}
+
+model NFT {
+  tokenId            String      @id @map("token_id")
+  sku                String
+  uri                String
+  uriHex             String      @map("uri_hex")
+  issuer             String
+  taxon              Int
+  flags              Int
+  transferFeeBps     Int?        @map("transfer_fee_bps")
+  mintedTxHash       String      @map("minted_tx_hash")
+  mintedLedgerIndex  Int         @map("minted_ledger_index")
+  currentOwner       String      @map("current_owner")
+  burned             Boolean     @default(false)
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  offers             NFTOffer[]
+
+  @@map("nfts")
+}
+
+enum OfferStatus {
+  CREATED
+  ACCEPTED
+  CANCELED
+  EXPIRED
+}
+
+model NFTOffer {
+  offerId          String       @id @map("offer_id")
+  tokenId          String       @map("token_id")
+  destination      String
+  amountDrops      String       @default("0") @map("amount_drops")
+  status           OfferStatus  @default(CREATED)
+  createdTxHash    String       @map("created_tx_hash")
+  acceptedTxHash   String?      @map("accepted_tx_hash")
+  expirationUnix   Int?         @map("expiration_unix")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  nft              NFT          @relation(fields: [tokenId], references: [tokenId])
+
+  @@map("nft_offers")
+}
+
+enum MintJobStatus {
+  PENDING
+  MINTED
+  DELIVERED
+  FAILED
+}
+
+model NFTMintJob {
+  idempotencyKey  String        @id @map("idempotency_key")
+  status          MintJobStatus @default(PENDING)
+  xrplAddress     String        @map("xrpl_address")
+  sku             String
+  nftTokenId      String?       @map("nft_token_id")
+  error           String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@map("nft_mint_jobs")
+}
