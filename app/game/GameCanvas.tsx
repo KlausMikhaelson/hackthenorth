@@ -355,7 +355,7 @@ export default function GameCanvas() {
     window.addEventListener("resize", onResize);
 
     // Socket.io client
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002";
+    const socketUrl = "https://hackthenorth.onrender.com";
     const socket = io(socketUrl);
     socketRef.current = socket;
     socket.on("connect", () => setConnected(true));
@@ -396,7 +396,7 @@ export default function GameCanvas() {
       try {
         const addr = localStorage.getItem("wallet_address");
         if (!addr) return;
-        const apiBase = (process.env.NEXT_PUBLIC_REALTIME_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002").replace(/\/$/, "");
+        const apiBase = "https://hackthenorth.onrender.com";
         const res = await fetch(`${apiBase}/api/user/byAddress/${addr}`);
         if (res.ok) {
           const data = await res.json();

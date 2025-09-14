@@ -24,7 +24,7 @@ export default function StorePage() {
   const [assets, setAssets] = useState<Assets | null>(null);
   const [options, setOptions] = useState<TextureOption[]>([]);
   const [saving, setSaving] = useState(false);
-  const apiBase = (process.env.NEXT_PUBLIC_REALTIME_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002").replace(/\/$/, "");
+  const apiBase = "https://hackthenorth.onrender.com";
 
   useEffect(() => {
     const addr = localStorage.getItem("wallet_address") || "";
