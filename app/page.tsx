@@ -42,7 +42,7 @@ export default function Home() {
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-amber-700 bg-amber-800/50 px-3 py-1 text-xs">
               <span className="h-2 w-2 rounded-full bg-amber-400"></span>
-              Autumn Multiplayer Prototype
+              Token Turrets
             </div>
             <h1 className="text-3xl sm:text-5xl font-bold leading-tight">
               Build, Battle, and Mint

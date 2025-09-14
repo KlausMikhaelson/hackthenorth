@@ -16,7 +16,7 @@ export default function SignupPage() {
     e.preventDefault();
     if (!username.trim()) return;
     try {
-      const apiBase = (process.env.NEXT_PUBLIC_REALTIME_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002").replace(/\/$/, "");
+      const apiBase = 'https://hackthenorth.onrender.com';
       const res = await fetch(`${apiBase}/api/user/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
