@@ -1,15 +1,29 @@
+require("dotenv").config();
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 const express = require("express");
+const cors = require("cors");
 const nftRoutes = require("./src/routes/nft.routes");
+const userRoutes = require("./src/routes/user.routes");
 const xrplService = require("./src/services/xrpl.service");
-require("dotenv").config();
+const mongoose = require("mongoose");
+const path = require("path");
+// Fallback to project root .env if local .env missing MONGO_URI
+if (!process.env.MONGO_URI) {
+  try {
+    require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+  } catch {}
+}
 
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3002;
 
 const app = express();
 app.use(express.json());
+app.use(cors({ origin: true, credentials: true }));
+// Disable ETag to avoid 304 Not Modified on JSON APIs
+app.set("etag", false);
 app.use("/api/nft", nftRoutes);
+app.use("/api/user", userRoutes);
 
 app.get("/health", (req, res) => {
   res.send("ok");
@@ -88,6 +102,13 @@ io.on("connection", (socket) => {
 httpServer.listen(port, async () => {
   console.log(`> Realtime server ready on http://localhost:${port}`);
   try {
+    const uri = process.env.MONGO_URI;
+    if (uri) {
+      await mongoose.connect(uri, { dbName: process.env.MONGO_DB || undefined });
+      console.log("> Mongo connected", mongoose.connection.host + "/" + mongoose.connection.name);
+    } else {
+      console.warn("MONGO_URI not set; running without DB");
+    }
     await xrplService.connect();
     console.log("> XRPL service connected");
   } catch (error) {

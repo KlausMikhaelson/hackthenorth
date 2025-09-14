@@ -7,119 +7,82 @@ export default function Home() {
   const params = useSearchParams();
   const msg = params.get("msg");
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
+    <div className="min-h-screen w-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-slate-100">
+      <main className="mx-auto max-w-6xl px-6 py-12">
         {msg && (
-          <div className="text-sm bg-red-100 text-red-900 px-3 py-2 rounded border border-red-300">
+          <div className="mb-4 text-sm bg-red-100 text-red-900 px-3 py-2 rounded border border-red-300">
             {msg}
           </div>
         )}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-          <Link
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto"
-            href="/signup"
-          >
-            Sign up
-          </Link>
-          <Link
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto"
-            href="/game"
-          >
-            Enter Game
-          </Link>
-        </div>
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          <div className="space-y-6">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800/60 px-3 py-1 text-xs">
+              <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+              Live Multiplayer Prototype
+            </div>
+            <h1 className="text-3xl sm:text-5xl font-bold leading-tight">
+              Build, Battle, and Mint
+              <span className="block text-sky-400">Your Tank on XRPL</span>
+            </h1>
+            <p className="text-slate-300 max-w-prose">
+              Enter the arena, earn hits, and collect skins. Generate a wallet on sign-up, mint
+              NFTs for your tank, and bring them into battle.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link href="/signup" className="inline-flex items-center justify-center rounded-md bg-sky-500 hover:bg-sky-400 text-white px-5 py-3 font-medium">
+                Get Started
+              </Link>
+              <Link href="/game" className="inline-flex items-center justify-center rounded-md border border-slate-600 hover:border-slate-500 px-5 py-3 font-medium">
+                Enter Game
+              </Link>
+              <Link href="/wallet" className="inline-flex items-center justify-center rounded-md border border-slate-600 hover:border-slate-500 px-5 py-3 font-medium">
+                Wallet
+              </Link>
+              <Link href="/store" className="inline-flex items-center justify-center rounded-md border border-slate-600 hover:border-slate-500 px-5 py-3 font-medium">
+                Store
+              </Link>
+            </div>
+            <div className="flex items-center gap-4 pt-2 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <Image src="/globe.svg" alt="XRPL" width={16} height={16} /> XRPL Testnet Ready
+              </div>
+              <div className="flex items-center gap-2">
+                <Image src="/window.svg" alt="Three.js" width={16} height={16} /> Three.js
+              </div>
+            </div>
+          </div>
+          <div className="relative">
+            <div className="aspect-[4/3] w-full rounded-2xl bg-slate-800/60 border border-slate-700 backdrop-blur-sm flex items-center justify-center overflow-hidden">
+              <Image className="dark:invert opacity-80" src="/next.svg" alt="Logo" width={220} height={48} />
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-5">
+            <h3 className="font-semibold">Instant Wallet</h3>
+            <p className="text-sm text-slate-300 mt-1">Sign up to auto-generate an XRPL wallet and store it securely.</p>
+          </div>
+          <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-5">
+            <h3 className="font-semibold">Mint Skins</h3>
+            <p className="text-sm text-slate-300 mt-1">Buy a skin and we mint an NFT to your wallet automatically.</p>
+          </div>
+          <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-5">
+            <h3 className="font-semibold">Bring to Battle</h3>
+            <p className="text-sm text-slate-300 mt-1">Your NFTs determine your tank’s look and feel in-game.</p>
+          </div>
+        </section>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      <footer className="mt-16 border-t border-slate-800/80">
+        <div className="mx-auto max-w-6xl px-6 py-6 text-xs text-slate-400 flex items-center justify-between">
+          <span>© {new Date().getFullYear()} HTN-25</span>
+          <div className="flex items-center gap-4">
+            <a className="hover:underline" href="https://xrpl.org" target="_blank" rel="noreferrer">XRPL Docs</a>
+            <a className="hover:underline" href="https://threejs.org" target="_blank" rel="noreferrer">Three.js</a>
+          </div>
+        </div>
       </footer>
     </div>
   );

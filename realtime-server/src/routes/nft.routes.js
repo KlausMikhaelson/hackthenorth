@@ -1,58 +1,39 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const NFT = require('../models/NFT');
+const NFTOffer = require('../models/NFTOffer');
+const User = require('../models/User');
 const xrplService = require('../services/xrpl.service');
 
-const prisma = new PrismaClient();
+// Using Mongoose models instead of Prisma
 
 router.post('/mint', async (req, res) => {
   try {
     const { idempotencyKey, userId, xrplAddress, sku, metadata } = req.body;
 
     if (!idempotencyKey || !xrplAddress || !sku) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Missing required fields: idempotencyKey, xrplAddress, sku' });
+    }
+    if (!require('xrpl').isValidClassicAddress(xrplAddress)) {
+      return res.status(400).json({ error: 'Invalid XRPL destination address' });
+    }
+    if (!process.env.NFT_ISSUER_ADDRESS || !process.env.NFT_ISSUER_SEED) {
+      return res.status(503).json({ error: 'XRPL issuer not configured on server' });
     }
 
-    const existingJob = await prisma.nFTMintJob.findUnique({
-      where: { idempotencyKey }
-    });
+    // For simplicity, skip mint job table; dedupe by checking existing NFT by sku or by offer
+    const existingOffer = await NFTOffer.findOne({ destination: xrplAddress }).lean();
 
-    if (existingJob) {
-      if (existingJob.status === 'FAILED') {
-        return res.status(400).json({ 
-          error: 'Previous mint failed', 
-          details: existingJob.error 
-        });
-      }
-
-      if (existingJob.nftTokenId) {
-        const nft = await prisma.nFT.findUnique({
-          where: { tokenId: existingJob.nftTokenId },
-          include: { offers: true }
-        });
-
-        const activeOffer = nft?.offers.find(o => o.status === 'CREATED');
-        
-        return res.json({
-          tokenId: existingJob.nftTokenId,
-          offerId: activeOffer?.offerId,
-          offerStatus: activeOffer?.status || 'NONE',
-          mintTx: nft?.mintedTxHash,
-          offerTx: activeOffer?.createdTxHash
-        });
-      }
+    if (existingOffer) {
+      return res.json({
+        tokenId: existingOffer.tokenId,
+        offerId: existingOffer.offerId,
+        offerStatus: existingOffer.status || 'CREATED',
+        mintTx: existingOffer.createdTxHash,
+      });
     }
 
-    const mintJob = await prisma.nFTMintJob.upsert({
-      where: { idempotencyKey },
-      update: {},
-      create: {
-        idempotencyKey,
-        xrplAddress,
-        sku,
-        status: 'PENDING'
-      }
-    });
+    // No mint job persistence in this minimal Mongo version
 
     let uri = '';
     if (metadata) {
@@ -64,7 +45,8 @@ router.post('/mint', async (req, res) => {
         external_url: metadata.external_url
       };
       
-      uri = `https://api.example.com/metadata/${idempotencyKey}`;
+      // Prefer explicit metadata image/external_url, else leave blank (URI is optional)
+      uri = metadata.image || metadata.external_url || '';
     }
 
     const taxonBase = parseInt(process.env.NFT_COLLECTION_TAXON_BASE || '1000');
@@ -78,20 +60,16 @@ router.post('/mint', async (req, res) => {
         transferFee: 0
       });
 
-      await prisma.nFT.create({
-        data: {
+      await NFT.findOneAndUpdate(
+        { tokenId: mintResult.tokenId },
+        {
           tokenId: mintResult.tokenId,
-          sku,
-          uri,
-          uriHex: xrplService.hexEncode(uri),
-          issuer: process.env.NFT_ISSUER_ADDRESS,
+          uri: uri || undefined,
           taxon,
-          flags: 3,
-          mintedTxHash: mintResult.txHash,
-          mintedLedgerIndex: mintResult.ledgerIndex,
-          currentOwner: process.env.NFT_ISSUER_ADDRESS
-        }
-      });
+          currentOwner: process.env.NFT_ISSUER_ADDRESS,
+        },
+        { upsert: true }
+      );
 
       const expirationUnix = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);
       
@@ -102,25 +80,20 @@ router.post('/mint', async (req, res) => {
         expiration: expirationUnix
       });
 
-      await prisma.nFTOffer.create({
-        data: {
+      await NFTOffer.findOneAndUpdate(
+        { offerId: offerResult.offerId },
+        {
           offerId: offerResult.offerId,
           tokenId: mintResult.tokenId,
           destination: xrplAddress,
-          amountDrops: '0',
           status: 'CREATED',
           createdTxHash: offerResult.txHash,
-          expirationUnix
-        }
-      });
+          expirationUnix,
+        },
+        { upsert: true }
+      );
 
-      await prisma.nFTMintJob.update({
-        where: { idempotencyKey },
-        data: {
-          status: 'MINTED',
-          nftTokenId: mintResult.tokenId
-        }
-      });
+      // No mint job update in minimal version
 
       if (global.io) {
         global.io.emit('nft.offerReady', {
@@ -141,13 +114,7 @@ router.post('/mint', async (req, res) => {
       });
 
     } catch (error) {
-      await prisma.nFTMintJob.update({
-        where: { idempotencyKey },
-        data: {
-          status: 'FAILED',
-          error: error.message
-        }
-      });
+      // No mint job failure persistence
 
       if (global.io) {
         global.io.emit('nft.error', {
@@ -166,13 +133,111 @@ router.post('/mint', async (req, res) => {
   }
 });
 
+// Mint using a stored user wallet
+router.post('/mintForUser', async (req, res) => {
+  try {
+    const { username, sku, metadata, signature, message } = req.body;
+    if (!username || !sku) return res.status(400).json({ error: 'username and sku required' });
+    const user = await User.findOne({ username }).lean();
+    if (!user) return res.status(404).json({ error: 'user not found' });
+
+    // Verify signature if provided (simple demo message verification)
+    if (signature && message) {
+      try {
+        const xrpl = require('xrpl');
+        const wallet = xrpl.Wallet.fromSeed(user.seed || "");
+        const ok = xrpl.verifySignature(message, signature, wallet.publicKey);
+        if (!ok) return res.status(401).json({ error: 'invalid signature' });
+      } catch (e) {
+        return res.status(400).json({ error: 'signature verification failed' });
+      }
+    }
+
+    // Prepare URI if provided
+    let uri = '';
+    if (metadata) {
+      uri = metadata.image || metadata.external_url || '';
+    }
+
+    const taxonBase = parseInt(process.env.NFT_COLLECTION_TAXON_BASE || '1000');
+    const taxon = taxonBase + (hashCode(sku) % 100);
+
+    const mintResult = await xrplService.mintNFT({ uri, sku, taxon, transferFee: 0 });
+
+    await NFT.findOneAndUpdate(
+      { tokenId: mintResult.tokenId },
+      {
+        tokenId: mintResult.tokenId,
+        uri: uri || undefined,
+        taxon,
+        currentOwner: process.env.NFT_ISSUER_ADDRESS || process.env.XRPL_ISSUER_ADDRESS,
+      },
+      { upsert: true }
+    );
+
+    const expirationUnix = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);
+    // Create offer if possible; service will mock if NO_DST
+    const offerResult = await xrplService.createOffer({
+      tokenId: mintResult.tokenId,
+      destination: user.address,
+      amountDrops: '0',
+      expiration: expirationUnix,
+    });
+
+    await NFTOffer.findOneAndUpdate(
+      { offerId: offerResult.offerId },
+      {
+        offerId: offerResult.offerId,
+        tokenId: mintResult.tokenId,
+        destination: user.address,
+        status: 'CREATED',
+        createdTxHash: offerResult.txHash,
+        expirationUnix,
+      },
+      { upsert: true }
+    );
+
+    if (global.io) {
+      global.io.emit('nft.offerReady', {
+        tokenId: mintResult.tokenId,
+        offerId: offerResult.offerId,
+        destination: user.address,
+        expiration: expirationUnix
+      });
+    }
+
+    res.json({
+      tokenId: mintResult.tokenId,
+      offerId: offerResult.offerId,
+      destination: user.address,
+      offerTx: offerResult.txHash,
+      acceptBy: expirationUnix,
+    });
+  } catch (error) {
+    console.error('mintForUser error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get inventory for a stored user
+router.get('/inventoryForUser/:username', async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username }).lean();
+    if (!user) return res.status(404).json({ error: 'user not found' });
+    const issuerOnly = (req.query.issuerOnly ?? 'true') === 'true';
+    const ledgerNFTs = await xrplService.getNFTInventory(user.address, issuerOnly);
+    res.json(ledgerNFTs);
+  } catch (error) {
+    console.error('inventoryForUser error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/offers/:offerId', async (req, res) => {
   try {
     const { offerId } = req.params;
 
-    const offer = await prisma.nFTOffer.findUnique({
-      where: { offerId }
-    });
+    const offer = await NFTOffer.findOne({ offerId }).lean();
 
     if (!offer) {
       return res.status(404).json({ error: 'Offer not found' });
@@ -208,9 +273,7 @@ router.get('/inventory', async (req, res) => {
 
     const tokenIds = ledgerNFTs.map(n => n.tokenId);
     
-    const dbNFTs = await prisma.nFT.findMany({
-      where: { tokenId: { in: tokenIds } }
-    });
+    const dbNFTs = await NFT.find({ tokenId: { $in: tokenIds } }).lean();
 
     const nftMap = new Map(dbNFTs.map(n => [n.tokenId, n]));
 
@@ -242,9 +305,7 @@ router.get('/metadata/:tokenId', async (req, res) => {
   try {
     const { tokenId } = req.params;
 
-    const nft = await prisma.nFT.findUnique({
-      where: { tokenId }
-    });
+    const nft = await NFT.findOne({ tokenId }).lean();
 
     if (!nft) {
       return res.status(404).json({ error: 'NFT not found' });
@@ -296,17 +357,18 @@ router.post('/reoffer', async (req, res) => {
       expiration: expirationUnix
     });
 
-    await prisma.nFTOffer.create({
-      data: {
+    await NFTOffer.findOneAndUpdate(
+      { offerId: offerResult.offerId },
+      {
         offerId: offerResult.offerId,
         tokenId,
         destination,
-        amountDrops: '0',
         status: 'CREATED',
         createdTxHash: offerResult.txHash,
-        expirationUnix
-      }
-    });
+        expirationUnix,
+      },
+      { upsert: true }
+    );
 
     if (global.io) {
       global.io.emit('nft.offerReady', {

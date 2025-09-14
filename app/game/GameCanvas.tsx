@@ -213,6 +213,25 @@ export default function GameCanvas() {
     socket.on("disconnect", () => setConnected(false));
 
     const username = getUsername();
+    // Fetch wallet-address bound user NFTs for texture decisions
+    (async () => {
+      try {
+        const addr = localStorage.getItem("wallet_address");
+        if (!addr) return;
+        const apiBase = (process.env.NEXT_PUBLIC_REALTIME_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002").replace(/\/$/, "");
+        const res = await fetch(`${apiBase}/api/user/byAddress/${addr}`);
+        if (res.ok) {
+          const data = await res.json();
+          console.log("User NFT summary:", data);
+          if (Array.isArray(data.nfts) && data.nfts.length > 0) {
+            const primary = data.nfts[0];
+            console.log("Primary tank mapping -> shape:", primary.shape, "name:", primary.name);
+          } else {
+            console.log("No NFTs found for user address.");
+          }
+        }
+      } catch {}
+    })();
 
     // Initial sync
     socket.on("players:state", (existing: PlayerState[]) => {

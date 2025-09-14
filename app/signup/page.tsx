@@ -12,13 +12,30 @@ export default function SignupPage() {
     if (existing) setUsername(existing);
   }, []);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim()) return;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("username", username.trim());
+    try {
+      const apiBase = (process.env.NEXT_PUBLIC_REALTIME_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002").replace(/\/$/, "");
+      const res = await fetch(`${apiBase}/api/user/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data?.error || "Signup failed");
+        return;
+      }
+      if (typeof window !== "undefined") {
+        localStorage.setItem("username", username.trim());
+        localStorage.setItem("wallet_address", data.address);
+        if (data.seed) localStorage.setItem("wallet_seed", data.seed);
+      }
+      router.push("/game");
+    } catch (err: any) {
+      alert(err?.message || "Network error");
     }
-    router.push("/game");
   }
 
   return (
