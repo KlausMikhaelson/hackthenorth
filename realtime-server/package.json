@@ -7,11 +7,10 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "mongoose": "^8.18.1",
     "socket.io": "^4.8.1"
   },
   "engines": {
     "node": ">=18.18.0"
   }
 }
-
-
