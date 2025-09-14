@@ -47,10 +47,13 @@ export default function WalletPage() {
       const info = await client.request({ command: "account_info", account: address, ledger_index: "validated" });
       const ownerCount = info.result.account_data.OwnerCount || 0;
       const server = await client.request({ command: "server_info" });
+      // @ts-ignore
       const base = parseFloat(server.result.info.validated_ledger.reserve_base_xrp);
+      // @ts-ignore
       const inc = parseFloat(server.result.info.validated_ledger.reserve_inc_xrp);
       setReserveXrp(((ownerCount * inc) + base).toString());
       const balDrops = info.result.account_data.Balance;
+      // @ts-ignore
       setBalanceXrp(dropsToXrp(balDrops));
     } catch (e) {
       console.error(e);
@@ -59,9 +62,11 @@ export default function WalletPage() {
 
   function generate() {
     const w = Wallet.generate();
+    // @ts-ignore
     setSeed(w.seed);
     setAddress(w.address);
     setXAddress(classicAddressToXAddress(w.address, false, false));
+    // @ts-ignore
     localStorage.setItem("wallet_seed", w.seed);
   }
 

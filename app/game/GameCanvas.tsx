@@ -186,11 +186,27 @@ export default function GameCanvas() {
         new THREE.Vector3(0, 0, 45),
         new THREE.Vector3(45, 0, 0),
       ];
+      function createDeterministicRandom(seed: string) {
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < seed.length; i++) {
+          h ^= seed.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return function rand() {
+          h += 0x6D2B79F5;
+          let t = Math.imul(h ^ (h >>> 15), 1 | h);
+          t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
       const addTrees = (root: THREE.Object3D) => {
         positions.forEach((p) => {
+          const rand = createDeterministicRandom(`${p.x},${p.z}`);
           const obj = root.clone(true);
           obj.position.set(p.x, 0, p.z);
-          obj.scale.set(2, 2, 2);
+          const s = 1.8 + rand() * 0.6; // slight deterministic variation
+          obj.scale.set(s, s, s);
+          obj.rotation.y = rand() * Math.PI * 2;
           scene.add(obj);
         });
       };
@@ -223,14 +239,30 @@ export default function GameCanvas() {
       ];
       // Reduce total count a bit (~60% kept)
       const selectedPositions = positions.filter((_, i) => (i % 5 !== 1 && i % 5 !== 3));
+      // Deterministic pseudo-random generator from a string seed
+      function createDeterministicRandom(seed: string) {
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < seed.length; i++) {
+          h ^= seed.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return function rand() {
+          h += 0x6D2B79F5;
+          let t = Math.imul(h ^ (h >>> 15), 1 | h);
+          t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
       const placeStones = (root: THREE.Object3D) => {
         selectedPositions.forEach((p) => {
           const obj = root.clone(true);
           obj.position.set(p.x, 0, p.z);
-          // Make stones ~25% smaller than previous range
-          const s = 0.01125 + Math.random() * 0.01875; // ~0.011–0.03
+          // Use deterministic random per position for consistent visuals across clients
+          const rand = createDeterministicRandom(`${p.x},${p.z}`);
+          const s = 0.01125 + rand() * 0.01875; // ~0.011–0.03
           obj.scale.set(s, s, s);
-          obj.rotation.y = Math.random() * Math.PI * 2;
+          obj.rotation.y = rand() * Math.PI * 2;
           scene.add(obj);
         });
       };

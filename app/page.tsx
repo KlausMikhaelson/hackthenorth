@@ -1,11 +1,17 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function Home() {
-  const params = useSearchParams();
-  const msg = params.get("msg");
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const m = params.get("msg");
+      if (m) setMsg(m);
+    } catch {}
+  }, []);
   return (
     <div className="relative min-h-screen w-full bg-gradient-to-b from-amber-950 via-amber-900 to-amber-950 text-amber-100">
       {/* Ambient fall glow */}
