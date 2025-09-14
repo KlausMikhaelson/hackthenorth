@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { io, Socket } from "socket.io-client";
 import { useRouter } from "next/navigation";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 // Physics removed; simple kinematics only
 
 type PlayerState = {
@@ -67,6 +68,16 @@ export default function GameCanvas() {
     camera.lookAt(0, 0, 0);
     const cameraOffset = new THREE.Vector3(0, 6, 12);
 
+    // Orbit controls (disabled zoom/pan, only rotate around player)
+    const controls = new OrbitControls(camera, renderer.domElement);
+
+
+    controls.enableZoom = false;
+    controls.enablePan = false;
+    controls.enableDamping = true;
+    // Prevent looking below the ground plane (tweak as desired)
+    controls.minPolarAngle = 0.1; // slightly above straight up
+    controls.maxPolarAngle = Math.PI / 2 - 0.05; // just above horizon
     // Environment cube map from public/texture
     (function loadEnvironment() {
       const loader = new THREE.CubeTextureLoader();
@@ -343,6 +354,16 @@ export default function GameCanvas() {
       position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
       rotationY: tank.rotation.y,
     });
+
+    // Lock orbit distance to current camera distance from tank
+    const initialOrbitDistance = () => {
+
+
+      const d = camera.position.distanceTo(tank.position);
+      controls.minDistance = d;
+      controls.maxDistance = d;
+    };
+    initialOrbitDistance();
 
     function tick() {
       const now = performance.now();
