@@ -18,6 +18,14 @@ type Bullet = {
   lifeMs: number;
 };
 
+type PlayerEntity = {
+  tank: THREE.Mesh;
+  nameSprite: THREE.Sprite;
+  healthBarBg: THREE.Mesh;
+  healthBarFg: THREE.Mesh;
+  health: number;
+};
+
 function getUsername(): string {
   if (typeof window === "undefined") return "";
   return localStorage.getItem("username") || "Guest";
@@ -48,6 +56,7 @@ export default function GameCanvas() {
     );
     camera.position.set(0, 10, 18);
     camera.lookAt(0, 0, 0);
+    const cameraOffset = new THREE.Vector3(0, 6, 12);
 
     // Lights
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -70,8 +79,47 @@ export default function GameCanvas() {
     tank.position.set(0, 1, 0);
     scene.add(tank);
 
+    // Name label and health bar helpers
+    function createNameSprite(name: string): THREE.Sprite {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d")!;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = "28px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(3, 0.8, 1);
+      return sprite;
+    }
+
+    function createHealthBar(): { bg: THREE.Mesh; fg: THREE.Mesh } {
+      const BAR_W = 2;
+      const BAR_H = 0.2;
+      const bgGeo = new THREE.PlaneGeometry(BAR_W, BAR_H);
+      const fgGeo = new THREE.PlaneGeometry(BAR_W, BAR_H);
+      const bgMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+      const fgMat = new THREE.MeshBasicMaterial({ color: 0x22c55e });
+      return { bg: new THREE.Mesh(bgGeo, bgMat), fg: new THREE.Mesh(fgGeo, fgMat) };
+    }
+
+    // Local overlays
+    const myNameSprite = createNameSprite(getUsername());
+    scene.add(myNameSprite);
+    const myHealthBar = createHealthBar();
+    scene.add(myHealthBar.bg);
+    scene.add(myHealthBar.fg);
+
     // Other players storage
-    const otherPlayers = new Map<string, THREE.Mesh>();
+    const otherPlayers = new Map<string, PlayerEntity>();
 
     // Bullets
     const bullets: Bullet[] = [];
@@ -117,23 +165,67 @@ export default function GameCanvas() {
 
     const username = getUsername();
 
+    // Initial sync
+    socket.on("players:state", (existing: PlayerState[]) => {
+      existing.forEach((p) => {
+        if (p.id === socket.id) return;
+        if (!otherPlayers.get(p.id)) {
+          const mesh = new THREE.Mesh(tankGeo, tankMat);
+          mesh.position.set(p.position.x, p.position.y, p.position.z);
+          mesh.rotation.y = p.rotationY;
+          const nameSprite = createNameSprite(p.name || "Player");
+          const { bg, fg } = createHealthBar();
+          scene.add(mesh);
+          scene.add(nameSprite);
+          scene.add(bg);
+          scene.add(fg);
+          otherPlayers.set(p.id, { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: 100 });
+        }
+      });
+    });
+
+    socket.on("player:join", (p: PlayerState) => {
+      if (p.id === socket.id) return;
+      if (!otherPlayers.get(p.id)) {
+        const mesh = new THREE.Mesh(tankGeo, tankMat);
+        mesh.position.set(p.position.x, p.position.y, p.position.z);
+        mesh.rotation.y = p.rotationY;
+        const nameSprite = createNameSprite(p.name || "Player");
+        const { bg, fg } = createHealthBar();
+        scene.add(mesh);
+        scene.add(nameSprite);
+        scene.add(bg);
+        scene.add(fg);
+        otherPlayers.set(p.id, { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: 100 });
+      }
+    });
+
     socket.on("player:update", (payload: PlayerState) => {
       const { id, position, rotationY } = payload;
       if (id === socket.id) return;
-      let mesh = otherPlayers.get(id);
-      if (!mesh) {
-        mesh = new THREE.Mesh(tankGeo, new THREE.MeshStandardMaterial({ color: 0x22c55e }));
+      let entity = otherPlayers.get(id);
+      if (!entity) {
+        const mesh = new THREE.Mesh(tankGeo, tankMat);
+        const nameSprite = createNameSprite(payload.name || "Player");
+        const { bg, fg } = createHealthBar();
         scene.add(mesh);
-        otherPlayers.set(id, mesh);
+        scene.add(nameSprite);
+        scene.add(bg);
+        scene.add(fg);
+        entity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: 100 };
+        otherPlayers.set(id, entity);
       }
-      mesh.position.set(position.x, position.y, position.z);
-      mesh.rotation.y = rotationY;
+      entity.tank.position.set(position.x, position.y, position.z);
+      entity.tank.rotation.y = rotationY;
     });
 
     socket.on("player:disconnect", ({ id }: { id: string }) => {
-      const mesh = otherPlayers.get(id);
-      if (mesh) {
-        scene.remove(mesh);
+      const entity = otherPlayers.get(id);
+      if (entity) {
+        scene.remove(entity.tank);
+        scene.remove(entity.nameSprite);
+        scene.remove(entity.healthBarBg);
+        scene.remove(entity.healthBarFg);
         otherPlayers.delete(id);
       }
     });
@@ -171,6 +263,13 @@ export default function GameCanvas() {
 
     window.addEventListener("click", fireBullet);
 
+    // Announce my join once socket is ready
+    socket.emit("player:join", {
+      name: username,
+      position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
+      rotationY: tank.rotation.y,
+    });
+
     function tick() {
       const now = performance.now();
       const dt = Math.min((now - lastTime) / 1000, 0.05);
@@ -193,6 +292,14 @@ export default function GameCanvas() {
 
       // Keep above ground
       tank.position.y = 1;
+
+      // Position my overlays
+      myNameSprite.position.set(tank.position.x, tank.position.y + 2.6, tank.position.z);
+      myHealthBar.bg.position.set(tank.position.x, tank.position.y + 2.2, tank.position.z);
+      myHealthBar.fg.position.copy(myHealthBar.bg.position);
+      myNameSprite.quaternion.copy(camera.quaternion);
+      myHealthBar.bg.quaternion.copy(camera.quaternion);
+      myHealthBar.fg.quaternion.copy(camera.quaternion);
 
       // Update bullets
       for (let i = bullets.length - 1; i >= 0; i--) {
@@ -217,6 +324,25 @@ export default function GameCanvas() {
         position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
         rotationY: tank.rotation.y,
       });
+
+      // Position other players' overlays
+      otherPlayers.forEach((entity) => {
+        entity.nameSprite.position.set(entity.tank.position.x, entity.tank.position.y + 2.6, entity.tank.position.z);
+        entity.healthBarBg.position.set(entity.tank.position.x, entity.tank.position.y + 2.2, entity.tank.position.z);
+        entity.healthBarFg.position.copy(entity.healthBarBg.position);
+        entity.nameSprite.quaternion.copy(camera.quaternion);
+        entity.healthBarBg.quaternion.copy(camera.quaternion);
+        entity.healthBarFg.quaternion.copy(camera.quaternion);
+      });
+
+      // Chase camera: follow behind tank with smoothing
+      const behind = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), tank.rotation.y);
+      const desired = new THREE.Vector3().copy(tank.position).add(new THREE.Vector3(behind.x * cameraOffset.z, cameraOffset.y, behind.z * cameraOffset.z));
+      // Smooth factor based on dt
+      const alpha = 1 - Math.pow(0.001, dt);
+      camera.position.lerp(desired, alpha);
+      const lookAtTarget = new THREE.Vector3(tank.position.x, tank.position.y + 1, tank.position.z);
+      camera.lookAt(lookAtTarget);
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
