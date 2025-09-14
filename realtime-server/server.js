@@ -18,7 +18,7 @@ const io = new Server(httpServer, {
 });
 
 // In-memory registry of connected players
-// Structure: id -> { id, name, position: {x,y,z}, rotationY }
+// Structure: id -> { id, name, position: {x,y,z}, rotationY, health, score }
 const players = new Map();
 
 io.on("connection", (socket) => {
@@ -32,6 +32,8 @@ io.on("connection", (socket) => {
       name: state?.name || "Guest",
       position: state?.position || { x: 0, y: 1, z: 0 },
       rotationY: state?.rotationY || 0,
+      health: 100,
+      score: 0,
     };
     players.set(socket.id, player);
     socket.broadcast.emit("player:join", player);
@@ -43,6 +45,8 @@ io.on("connection", (socket) => {
       if (state?.position) existing.position = state.position;
       if (typeof state?.rotationY === "number") existing.rotationY = state.rotationY;
       if (state?.name) existing.name = state.name;
+      if (typeof state?.health === "number") existing.health = state.health;
+      if (typeof state?.score === "number") existing.score = state.score;
       players.set(socket.id, existing);
     }
     socket.broadcast.emit("player:update", { id: socket.id, ...state });
@@ -50,6 +54,23 @@ io.on("connection", (socket) => {
 
   socket.on("bullet:fire", (bullet) => {
     socket.broadcast.emit("bullet:fire", { id: socket.id, ...bullet });
+  });
+
+  // Client tells server a hit happened; server updates health and broadcasts
+  socket.on("player:hit", ({ targetId, damage }) => {
+    const target = players.get(targetId);
+    if (!target) return;
+    const dmg = typeof damage === "number" && damage > 0 ? damage : 10;
+    target.health = Math.max(0, (target.health ?? 100) - dmg);
+    players.set(targetId, target);
+    io.emit("player:health", { id: targetId, health: target.health });
+    // Award score to shooter and broadcast
+    const shooter = players.get(socket.id);
+    if (shooter) {
+      shooter.score = (shooter.score ?? 0) + 1;
+      players.set(socket.id, shooter);
+      io.emit("player:score", { id: socket.id, score: shooter.score });
+    }
   });
 
   socket.on("disconnect", () => {

@@ -1,14 +1,19 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { io, Socket } from "socket.io-client";
+import { useRouter } from "next/navigation";
+// Physics removed; simple kinematics only
 
 type PlayerState = {
   id: string;
   name: string;
   position: { x: number; y: number; z: number };
   rotationY: number;
+  health?: number;
+  score?: number;
 };
 
 type Bullet = {
@@ -16,6 +21,7 @@ type Bullet = {
   position: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
   lifeMs: number;
+  shooterId?: string;
 };
 
 type PlayerEntity = {
@@ -24,6 +30,7 @@ type PlayerEntity = {
   healthBarBg: THREE.Mesh;
   healthBarFg: THREE.Mesh;
   health: number;
+  score?: number;
 };
 
 function getUsername(): string {
@@ -35,6 +42,8 @@ export default function GameCanvas() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const router = useRouter();
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
     const mount = mountRef.current!;
@@ -57,6 +66,34 @@ export default function GameCanvas() {
     camera.position.set(0, 10, 18);
     camera.lookAt(0, 0, 0);
     const cameraOffset = new THREE.Vector3(0, 6, 12);
+
+    // Environment cube map from public/texture
+    (function loadEnvironment() {
+      const loader = new THREE.CubeTextureLoader();
+      loader.setPath("/textures/");
+      const tryLoad = (urls: string[]) =>
+        new Promise<THREE.CubeTexture>((resolve, reject) => {
+          loader.load(urls, (tex) => resolve(tex), undefined, (err) => reject(err));
+        });
+      // Preferred order per three.js: [px, nx, py, ny, pz, nz]
+      tryLoad(["px.png", "nx.png", "py.png", "ny.png", "pz.png", "nz.png"]).then(
+        (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          scene.background = tex;
+          scene.environment = tex;
+        },
+        () => {
+          // Fallback to user-provided naming example
+          tryLoad(["nx.png", "px.png", "py1.png", "ny.png", "nz.png", "pz.png"]).then((tex2) => {
+            tex2.colorSpace = THREE.SRGBColorSpace;
+            scene.background = tex2;
+            scene.environment = tex2;
+          }).catch(() => {
+            // Ignore if textures are not present
+          });
+        }
+      );
+    })();
 
     // Lights
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -124,6 +161,7 @@ export default function GameCanvas() {
     // Bullets
     const bullets: Bullet[] = [];
     const bulletMeshes: THREE.Mesh[] = [];
+    // No physics bodies
     const bulletGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16);
     bulletGeo.rotateX(Math.PI / 2); // face forward
     const bulletMat = new THREE.MeshStandardMaterial({ color: 0xfacc15 });
@@ -179,7 +217,8 @@ export default function GameCanvas() {
           scene.add(nameSprite);
           scene.add(bg);
           scene.add(fg);
-          otherPlayers.set(p.id, { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: 100 });
+          const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0 };
+          otherPlayers.set(p.id, entity);
         }
       });
     });
@@ -196,7 +235,8 @@ export default function GameCanvas() {
         scene.add(nameSprite);
         scene.add(bg);
         scene.add(fg);
-        otherPlayers.set(p.id, { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: 100 });
+        const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0 };
+        otherPlayers.set(p.id, entity);
       }
     });
 
@@ -212,7 +252,7 @@ export default function GameCanvas() {
         scene.add(nameSprite);
         scene.add(bg);
         scene.add(fg);
-        entity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: 100 };
+        entity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: payload.health ?? 100 };
         otherPlayers.set(id, entity);
       }
       entity.tank.position.set(position.x, position.y, position.z);
@@ -230,18 +270,50 @@ export default function GameCanvas() {
       }
     });
 
-    socket.on("bullet:fire", (bullet: Bullet) => {
+    socket.on("bullet:fire", (bullet: any) => {
+      const shooterId = (bullet as any).id as string | undefined;
+      const newBullet: Bullet = { ...bullet, shooterId };
       const mesh = new THREE.Mesh(bulletGeo, bulletMat);
-      mesh.position.set(bullet.position.x, bullet.position.y, bullet.position.z);
+      mesh.position.set(newBullet.position.x, newBullet.position.y, newBullet.position.z);
       scene.add(mesh);
-      bullets.push(bullet);
+      bullets.push(newBullet);
       bulletMeshes.push(mesh);
+    });
+
+    socket.on("player:health", ({ id, health }: { id: string; health: number }) => {
+      if (id === socket.id) {
+        myHealth = health;
+        if (myHealth <= 0 && !redirectedRef.current) {
+          redirectedRef.current = true;
+          router.push("/?msg=" + encodeURIComponent("You died. Try again."));
+          return;
+        }
+      }
+      const e = otherPlayers.get(id);
+      if (e) {
+        e.health = health;
+      }
+    });
+
+    socket.on("player:score", ({ id, score }: { id: string; score: number }) => {
+      const e = otherPlayers.get(id);
+      if (id === socket.id) {
+        // could be used for UI later
+      }
+      if (e) {
+        e.score = score;
+      }
     });
 
     // Movement
     const speed = 8; // units per second
     const rotSpeed = 2.5; // radians per second
     let lastTime = performance.now();
+
+    // No physics world
+    let myHealth = 100;
+
+    // No physics helpers
 
     function fireBullet() {
       const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), tank.rotation.y);
@@ -252,12 +324,14 @@ export default function GameCanvas() {
         position: { x: origin.x, y: origin.y, z: origin.z },
         velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
         lifeMs: 2000,
+        shooterId: socket.id,
       };
       const mesh = new THREE.Mesh(bulletGeo, bulletMat);
       mesh.position.set(origin.x, origin.y, origin.z);
       scene.add(mesh);
       bullets.push(bullet);
       bulletMeshes.push(mesh);
+      // No physics body
       socket.emit("bullet:fire", bullet);
     }
 
@@ -289,9 +363,47 @@ export default function GameCanvas() {
         move.normalize().multiplyScalar(speed * dt);
         tank.position.add(move);
       }
-
-      // Keep above ground
       tank.position.y = 1;
+
+      // Detect bullet vs player overlaps in simple kinematics
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        const shooterId = b.shooterId;
+
+        // First: check collision with ME (target client removes without emitting)
+        if (shooterId && shooterId !== socket.id) {
+          const dxMe = tank.position.x - b.position.x;
+          const dyMe = tank.position.y - b.position.y;
+          const dzMe = tank.position.z - b.position.z;
+          const distMe = Math.sqrt(dxMe * dxMe + dyMe * dyMe + dzMe * dzMe);
+          if (distMe < 1.2) {
+            bullets.splice(i, 1);
+            const m = bulletMeshes.splice(i, 1)[0];
+            if (m) scene.remove(m);
+            continue;
+          }
+        }
+
+        // Then: check other players (not the shooter); shooter emits the hit
+        let removed = false;
+        otherPlayers.forEach((entity, pid) => {
+          if (removed) return;
+          if (!shooterId || shooterId === pid) return;
+          const dx = entity.tank.position.x - b.position.x;
+          const dy = entity.tank.position.y - b.position.y;
+          const dz = entity.tank.position.z - b.position.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist < 1.2) {
+            if (socket.id === shooterId) {
+              socket.emit("player:hit", { targetId: pid, damage: 20 });
+            }
+            bullets.splice(i, 1);
+            const m = bulletMeshes.splice(i, 1)[0];
+            if (m) scene.remove(m);
+            removed = true;
+          }
+        });
+      }
 
       // Position my overlays
       myNameSprite.position.set(tank.position.x, tank.position.y + 2.6, tank.position.z);
@@ -300,22 +412,26 @@ export default function GameCanvas() {
       myNameSprite.quaternion.copy(camera.quaternion);
       myHealthBar.bg.quaternion.copy(camera.quaternion);
       myHealthBar.fg.quaternion.copy(camera.quaternion);
+      // Scale my health bar
+      const myScale = Math.max(0, Math.min(1, myHealth / 100));
+      myHealthBar.fg.scale.set(myScale, 1, 1);
+      myHealthBar.fg.position.x = myHealthBar.bg.position.x - (1 - myScale) * 1.0; // anchor left assuming width=2
 
-      // Update bullets
+      // Update bullets TTL, movement and cleanup
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
-        const m = bulletMeshes[i];
         b.lifeMs -= dt * 1000;
-        if (b.lifeMs <= 0) {
-          bullets.splice(i, 1);
-          const [removed] = bulletMeshes.splice(i, 1);
-          if (removed) scene.remove(removed);
-          continue;
-        }
+        // Move bullet
         b.position.x += b.velocity.x * dt;
         b.position.y += b.velocity.y * dt;
         b.position.z += b.velocity.z * dt;
-        m.position.set(b.position.x, b.position.y, b.position.z);
+        bulletMeshes[i].position.set(b.position.x, b.position.y, b.position.z);
+        const outOfBounds = Math.abs(b.position.x) > 32 || b.position.y < 0 || Math.abs(b.position.z) > 32;
+        if (b.lifeMs <= 0 || outOfBounds) {
+          bullets.splice(i, 1);
+          const m = bulletMeshes.splice(i, 1)[0];
+          if (m) scene.remove(m);
+        }
       }
 
       // Broadcast my state
@@ -333,6 +449,9 @@ export default function GameCanvas() {
         entity.nameSprite.quaternion.copy(camera.quaternion);
         entity.healthBarBg.quaternion.copy(camera.quaternion);
         entity.healthBarFg.quaternion.copy(camera.quaternion);
+        const scale = Math.max(0, Math.min(1, entity.health / 100));
+        entity.healthBarFg.scale.set(scale, 1, 1);
+        entity.healthBarFg.position.x = entity.healthBarBg.position.x - (1 - scale) * 1.0;
       });
 
       // Chase camera: follow behind tank with smoothing
@@ -348,6 +467,7 @@ export default function GameCanvas() {
       requestAnimationFrame(tick);
     }
 
+    // Start loop
     tick();
 
     return () => {
@@ -356,10 +476,11 @@ export default function GameCanvas() {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("click", fireBullet);
       socket.disconnect();
+      // No physics cleanup needed
       mount.removeChild(renderer.domElement);
       renderer.dispose();
     };
-  }, []);
+  }, [router]);
 
   return (
     <div className="w-full h-[calc(100vh-49px)]" ref={mountRef}>
