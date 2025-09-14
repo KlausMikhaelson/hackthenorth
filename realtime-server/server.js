@@ -1,21 +1,27 @@
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+const express = require("express");
+const nftRoutes = require("./src/routes/nft.routes");
+const xrplService = require("./src/services/xrpl.service");
+require("dotenv").config();
 
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3002;
 
-const httpServer = createServer((req, res) => {
-  if (req.url === "/health") {
-    res.statusCode = 200;
-    res.end("ok");
-    return;
-  }
-  res.statusCode = 200;
-  res.end("realtime-server running");
+const app = express();
+app.use(express.json());
+app.use("/api/nft", nftRoutes);
+
+app.get("/health", (req, res) => {
+  res.send("ok");
 });
+
+const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: { origin: true, credentials: true },
 });
+
+global.io = io;
 
 // In-memory registry of connected players
 // Structure: id -> { id, name, position: {x,y,z}, rotationY, health, score }
@@ -79,8 +85,14 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(port, () => {
+httpServer.listen(port, async () => {
   console.log(`> Realtime server ready on http://localhost:${port}`);
+  try {
+    await xrplService.connect();
+    console.log("> XRPL service connected");
+  } catch (error) {
+    console.error("Failed to connect to XRPL:", error);
+  }
 });
 
 
