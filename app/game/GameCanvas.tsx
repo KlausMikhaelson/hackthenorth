@@ -34,6 +34,7 @@ type PlayerEntity = {
   healthBarFg: THREE.Mesh;
   health: number;
   score?: number;
+  textureSrc?: string | null;
 };
 
 function getUsername(): string {
@@ -365,10 +366,11 @@ export default function GameCanvas() {
           scene.add(nameSprite);
           scene.add(bg);
           scene.add(fg);
-          const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0 };
+          const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0, textureSrc: null };
           otherPlayers.set(p.id, entity);
-          if (p.textureSrc) {
+          if (p.textureSrc && entity.textureSrc !== p.textureSrc) {
             applySideTextures(mesh, p.textureSrc);
+            entity.textureSrc = p.textureSrc;
           }
         }
       });
@@ -389,10 +391,11 @@ export default function GameCanvas() {
         scene.add(nameSprite);
         scene.add(bg);
         scene.add(fg);
-        const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0 };
+        const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0, textureSrc: null };
         otherPlayers.set(p.id, entity);
-        if (p.textureSrc) {
+        if (p.textureSrc && entity.textureSrc !== p.textureSrc) {
           applySideTextures(mesh, p.textureSrc);
+          entity.textureSrc = p.textureSrc;
         }
       }
     });
@@ -409,7 +412,7 @@ export default function GameCanvas() {
         scene.add(nameSprite);
         scene.add(bg);
         scene.add(fg);
-        entity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: payload.health ?? 100 };
+        entity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: payload.health ?? 100, textureSrc: null };
         otherPlayers.set(id, entity);
       }
       if (position) {
@@ -418,8 +421,9 @@ export default function GameCanvas() {
       if (typeof rotationY === "number") {
         entity.tank.rotation.y = rotationY;
       }
-      if (payload.textureSrc) {
+      if (payload.textureSrc && entity.textureSrc !== payload.textureSrc) {
         applySideTextures(entity.tank, payload.textureSrc);
+        entity.textureSrc = payload.textureSrc;
       }
     });
 
@@ -615,8 +619,7 @@ export default function GameCanvas() {
         name: username,
         position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
         rotationY: tank.rotation.y,
-        // Only include texture if we have one and this is the first broadcast after selection
-        // (we already sent a one-off update when it was fetched)
+        ...(myTextureSrc ? { textureSrc: myTextureSrc } : {}),
       });
 
       // Position other players' overlays
