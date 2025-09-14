@@ -25,12 +25,17 @@ export default function StorePage() {
   const [options, setOptions] = useState<TextureOption[]>([]);
   const [saving, setSaving] = useState(false);
   const apiBase = "https://hackthenorth.onrender.com";
+  // const apiBase = 'http://localhost:3002';
+  const [showRoomModal, setShowRoomModal] = useState(false);
+  const [tempRoom, setTempRoom] = useState("");
 
   useEffect(() => {
     const addr = localStorage.getItem("wallet_address") || "";
     setAddress(addr);
     if (addr) void loadAssets(addr);
     void loadTextureOptions();
+    const rid = typeof window !== "undefined" ? (localStorage.getItem("room_id") || "public") : "public";
+    setTempRoom(rid);
   }, []);
 
   async function loadAssets(addr: string) {
@@ -122,6 +127,13 @@ export default function StorePage() {
             <Link href="/" className="underline">Home</Link>
             <span className="mx-2">/</span>
             <span>Store</span>
+            <span className="mx-2">/</span>
+            <button
+              className="underline"
+              onClick={() => setShowRoomModal(true)}
+            >
+              Change room
+            </button>
           </div>
           <Link href="/game" className="text-sm underline text-amber-300/90">Back to Game</Link>
         </div>
@@ -139,9 +151,15 @@ export default function StorePage() {
                     <button key={t.id} onClick={() => selectTexture(t.id)} className={`rounded-xl overflow-hidden border ${active ? "border-amber-400" : "border-amber-800"} bg-amber-900/40 hover:border-amber-700 text-left`}>
                       <div className="relative w-full h-40">
                         <Image src={t.src} alt={t.label} fill className="object-cover" />
+                        <div className="absolute top-2 left-2 text-[11px]">
+                          <span className="inline-flex items-center rounded-full border border-amber-800 bg-amber-900/70 px-2 py-0.5">1 XRLUSD</span>
+                        </div>
                       </div>
                       <div className="p-3 flex items-center justify-between text-sm">
-                        <span>{t.label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center rounded-full border border-amber-800 bg-amber-900/40 px-2 py-0.5 text-[11px]">1 XRLUSD</span>
+                          <span>{t.label}</span>
+                        </div>
                         {active && <span className="text-amber-400">Selected</span>}
                       </div>
                     </button>
@@ -170,6 +188,43 @@ export default function StorePage() {
         )}
       </main>
 
+      {showRoomModal && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowRoomModal(false)} />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md rounded-lg border shadow-lg bg-white text-slate-900">
+            <div className="px-5 py-4 border-b flex items-center justify-between">
+              <h3 className="font-semibold">Change Room</h3>
+              <button onClick={() => setShowRoomModal(false)} className="text-sm underline">Close</button>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="block text-sm">Room ID</label>
+              <input
+                value={tempRoom}
+                onChange={(e) => setTempRoom(e.target.value)}
+                placeholder="e.g. public or friends-lobby"
+                className="w-full border rounded px-3 py-2"
+              />
+              <p className="text-xs text-slate-500">This sets the room your game will join.</p>
+            </div>
+            <div className="px-5 py-4 border-t flex items-center justify-end gap-2">
+              <button onClick={() => setShowRoomModal(false)} className="px-4 py-2 text-sm underline">Cancel</button>
+              <button
+                onClick={() => {
+                  const next = (tempRoom || "public").trim();
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("room_id", next);
+                    setShowRoomModal(false);
+                    alert(`Room set to ${next}. Go to the Game to join this room.`);
+                  }
+                }}
+                className="px-4 py-2 text-sm rounded bg-slate-900 text-white hover:opacity-90"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Page-scoped styles for falling leaves */}
       <style jsx>{`
         .leaf {

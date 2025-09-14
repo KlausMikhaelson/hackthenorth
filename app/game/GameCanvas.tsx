@@ -48,6 +48,8 @@ export default function GameCanvas() {
   const [connected, setConnected] = useState(false);
   const router = useRouter();
   const redirectedRef = useRef(false);
+  const [myScore, setMyScore] = useState(0);
+  const hadMultiplePlayersRef = useRef(false);
 
   useEffect(() => {
     const mount = mountRef.current!;
@@ -356,6 +358,7 @@ export default function GameCanvas() {
 
     // Socket.io client
     const socketUrl = "https://hackthenorth.onrender.com";
+    // const socketUrl = 'http://localhost:3002';
     const socket = io(socketUrl);
     socketRef.current = socket;
     socket.on("connect", () => setConnected(true));
@@ -397,6 +400,7 @@ export default function GameCanvas() {
         const addr = localStorage.getItem("wallet_address");
         if (!addr) return;
         const apiBase = "https://hackthenorth.onrender.com";
+        // const apiBase = 'http://localhost:3002';
         const res = await fetch(`${apiBase}/api/user/byAddress/${addr}`);
         if (res.ok) {
           const data = await res.json();
@@ -446,6 +450,9 @@ export default function GameCanvas() {
           }
         }
       });
+      // Track if the room has ever had 2+ players
+      const totalPlayersNow = otherPlayers.size + 1; // me + others
+      if (totalPlayersNow >= 2) hadMultiplePlayersRef.current = true;
     });
 
     socket.on("player:join", (p: PlayerState) => {
@@ -470,6 +477,9 @@ export default function GameCanvas() {
           entity.textureSrc = p.textureSrc;
         }
       }
+      // Mark that a match is active when we reach 2+ players
+      const totalPlayersNow = otherPlayers.size + 1;
+      if (totalPlayersNow >= 2) hadMultiplePlayersRef.current = true;
     });
 
     socket.on("player:update", (payload: PlayerState) => {
@@ -508,6 +518,12 @@ export default function GameCanvas() {
         scene.remove(entity.healthBarFg);
         otherPlayers.delete(id);
       }
+      // If we previously had 2+ players and now only 1 remains (me), declare win
+      const totalPlayersNow = otherPlayers.size + 1;
+      if (!redirectedRef.current && hadMultiplePlayersRef.current && totalPlayersNow === 1) {
+        redirectedRef.current = true;
+        router.push("/winner?msg=" + encodeURIComponent("You won! Escrow will release the prize to your account soon."));
+      }
     });
 
     socket.on("bullet:fire", (bullet: any) => {
@@ -538,7 +554,7 @@ export default function GameCanvas() {
     socket.on("player:score", ({ id, score }: { id: string; score: number }) => {
       const e = otherPlayers.get(id);
       if (id === socket.id) {
-        // could be used for UI later
+        setMyScore(score);
       }
       if (e) {
         e.score = score;
@@ -577,12 +593,46 @@ export default function GameCanvas() {
 
     window.addEventListener("click", fireBullet);
 
-    // Announce my join once socket is ready
-    socket.emit("player:join", {
-      name: username,
-      position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
-      rotationY: tank.rotation.y,
-      textureSrc: myTextureSrc,
+    // Room join UI (simple prompt modal)
+    const roomId = (typeof window !== 'undefined' ? (localStorage.getItem('room_id') || prompt('Enter Room ID (or type new ID to create):', 'public') || 'public') : 'public');
+    if (typeof window !== 'undefined') localStorage.setItem('room_id', roomId);
+    socket.emit('room:join', { roomId });
+    socket.once('room:joined', () => {
+      // Compute a random spawn near the center, avoiding overlap with others if possible
+      const SPAWN_RADIUS = 25; // small radius from center
+      function pickSpawn() {
+        // Uniform random point in a disk
+        const r = Math.sqrt(Math.random()) * SPAWN_RADIUS;
+        const a = Math.random() * Math.PI * 2;
+        const x = r * Math.cos(a);
+        const z = r * Math.sin(a);
+        return new THREE.Vector3(x, 1, z);
+      }
+      function isFarFromOthers(p: THREE.Vector3) {
+        let ok = true;
+        otherPlayers.forEach((e) => {
+          const dx = e.tank.position.x - p.x;
+          const dz = e.tank.position.z - p.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < 25) ok = false; // at least 5 units away
+        });
+        return ok;
+      }
+      let spawn = pickSpawn();
+      for (let i = 0; i < 20; i++) {
+        if (isFarFromOthers(spawn)) break;
+        spawn = pickSpawn();
+      }
+      tank.position.set(spawn.x, spawn.y, spawn.z);
+      // Random initial facing
+      tank.rotation.y = Math.random() * Math.PI * 2;
+      // Announce my join after room is set
+      socket.emit("player:join", {
+        name: username,
+        position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
+        rotationY: tank.rotation.y,
+        textureSrc: myTextureSrc,
+      });
     });
 
     // Lock orbit distance to current camera distance from tank
@@ -742,6 +792,9 @@ export default function GameCanvas() {
           Connecting to server...
         </div>
       )}
+      <div className="absolute top-14 right-3 text-xs bg-sky-100 text-sky-900 px-2 py-1 rounded">
+        Score: {myScore}
+      </div>
     </div>
   );
 }
