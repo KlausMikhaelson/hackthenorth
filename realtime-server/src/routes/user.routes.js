@@ -6,6 +6,7 @@ const NFT = require('../models/NFT');
 const NFTOffer = require('../models/NFTOffer');
 const xrplService = require('../services/xrpl.service');
 const UserAsset = require('../models/UserAsset');
+const Room = require('../models/Room');
 
 router.post('/signup', async (req, res) => {
   try {

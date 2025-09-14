@@ -1,6 +1,7 @@
 const xrpl = require('xrpl');
 const NFT = require('../models/NFT');
 const NFTOffer = require('../models/NFTOffer');
+const cc = require('five-bells-condition');
 
 class XRPLService {
   constructor() {
@@ -279,6 +280,62 @@ class XRPLService {
     if (global.io) {
       global.io.emit(`nft.${event}`, data);
     }
+  }
+
+  // Generate a condition/fulfillment pair using five-bells-condition
+  generateConditionFulfillment() {
+    const preimageData = require('crypto').randomBytes(32);
+    const fulfillment = new cc.PreimageSha256();
+    fulfillment.setPreimage(preimageData);
+    const conditionBinary = fulfillment.getConditionBinary();
+    const fulfillmentBinary = fulfillment.serializeBinary();
+    const conditionHex = conditionBinary.toString('hex').toUpperCase();
+    const fulfillmentHex = fulfillmentBinary.toString('hex').toUpperCase();
+    return { conditionHex, fulfillmentHex };
+  }
+
+  // Create a conditional escrow from issuer to destination (amount in XRP string)
+  async createConditionalEscrow({ destination, amountXrp = '1', cancelAfterSeconds = 3600, conditionHex }) {
+    this.ensureIssuerConfigured();
+    if (!this.client?.isConnected()) await this.connect();
+    const wallet = xrpl.Wallet.fromSeed(this.issuerSeed);
+    // XRPL requires RippleEpoch time for CancelAfter
+    const rippleEpoch = (dateMs) => Math.floor((dateMs - Date.UTC(2000, 0, 1)) / 1000);
+    const cancelAfter = rippleEpoch(Date.now() + cancelAfterSeconds * 1000);
+    const tx = await this.client.autofill({
+      TransactionType: 'EscrowCreate',
+      Account: wallet.address,
+      Amount: xrpl.xrpToDrops(amountXrp),
+      Destination: destination,
+      CancelAfter: cancelAfter,
+      Condition: conditionHex,
+    });
+    const signed = wallet.sign(tx);
+    const res = await this.client.submitAndWait(signed.tx_blob);
+    if (res.result.meta.TransactionResult !== 'tesSUCCESS') {
+      throw new Error(`EscrowCreate failed: ${res.result.meta.TransactionResult}`);
+    }
+    // Sequence of the Escrow ledger object is the Account's sequence at time of tx
+    const seq = tx.Sequence;
+    return { sequence: seq, txHash: res.result.hash, amountDrops: tx.Amount };
+  }
+
+  async finishConditionalEscrow({ owner, sequence, fulfillmentHex }) {
+    if (!this.client?.isConnected()) await this.connect();
+    const wallet = xrpl.Wallet.fromSeed(this.issuerSeed);
+    const tx = await this.client.autofill({
+      TransactionType: 'EscrowFinish',
+      Account: wallet.address,
+      Owner: owner,
+      OfferSequence: sequence,
+      Fulfillment: fulfillmentHex,
+    });
+    const signed = wallet.sign(tx);
+    const res = await this.client.submitAndWait(signed.tx_blob);
+    if (res.result.meta.TransactionResult !== 'tesSUCCESS') {
+      throw new Error(`EscrowFinish failed: ${res.result.meta.TransactionResult}`);
+    }
+    return { txHash: res.result.hash };
   }
 }
 

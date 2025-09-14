@@ -7,6 +7,7 @@ const nftRoutes = require("./src/routes/nft.routes");
 const userRoutes = require("./src/routes/user.routes");
 const assetsRoutes = require("./src/routes/assets.routes");
 const xrplService = require("./src/services/xrpl.service");
+const Room = require("./src/models/Room");
 const mongoose = require("mongoose");
 const path = require("path");
 // Fallback to project root .env if local .env missing MONGO_URI
@@ -40,8 +41,10 @@ const io = new Server(httpServer, {
 global.io = io;
 
 // In-memory registry of connected players, scoped by room
-// Structure: roomId -> Map(socketId -> { id, name, position, rotationY, health, score, textureSrc })
+// Structure: roomId -> Map(socketId -> { id, name, address, position, rotationY, health, score, textureSrc })
 const roomPlayers = new Map();
+// Best-effort username -> wallet address map fed by API lookups from clients
+global.lastKnownAddressMap = new Map();
 
 io.on("connection", (socket) => {
   // Join a room first
@@ -50,10 +53,51 @@ io.on("connection", (socket) => {
     socket.join(roomId);
     socket.data.roomId = roomId;
     if (!roomPlayers.has(roomId)) roomPlayers.set(roomId, new Map());
+    // If room record doesn't exist, create it and initialize escrow
+    Room.findOne({ roomId }).then(async (doc) => {
+      try {
+        if (!doc) {
+          // Generate condition/fulfillment and create escrow
+          const { conditionHex, fulfillmentHex } = xrplService.generateConditionFulfillment();
+          const owner = xrplService.issuerAddress;
+          const dest = xrplService.issuerAddress; // placeholder; funds held by issuer until winner picked
+          const amountXrp = process.env.ROOM_ESCROW_XRP || '1';
+          let sequence = null;
+          let amountDrops = null;
+          try {
+            const res = await xrplService.createConditionalEscrow({ destination: dest, amountXrp, cancelAfterSeconds: 24*3600, conditionHex });
+            sequence = res.sequence;
+            amountDrops = res.amountDrops;
+          } catch (e) {
+            console.warn("EscrowCreate failed; proceeding without on-ledger escrow in dev:", e?.message || e);
+          }
+          await Room.create({ roomId, escrowCondition: conditionHex, escrowFulfillment: fulfillmentHex, escrowOwner: owner, escrowSequence: sequence, amountDrops, status: 'OPEN' });
+        }
+      } catch (e) {
+        console.error('room init error', e);
+      }
+    });
     // Send existing players in this room only
     const players = Array.from(roomPlayers.get(roomId).values());
     socket.emit("players:state", players);
     socket.emit("room:joined", { roomId });
+  });
+
+  // Best-effort map from username to XRPL address for winner payout mapping.
+  // Also, when known, attach address onto the player's server-side record.
+  socket.on('user:address', ({ username, address }) => {
+    if (typeof username === 'string' && typeof address === 'string') {
+      global.lastKnownAddressMap.set(username, address);
+      const roomId = socket.data.roomId;
+      if (roomId && roomPlayers.has(roomId)) {
+        const playersMap = roomPlayers.get(roomId);
+        const existing = playersMap.get(socket.id);
+        if (existing) {
+          existing.address = address;
+          playersMap.set(socket.id, existing);
+        }
+      }
+    }
   });
 
   // Handle join with initial state from client (after room join)
@@ -65,6 +109,7 @@ io.on("connection", (socket) => {
     const player = {
       id: socket.id,
       name: state?.name || "Guest",
+      address: typeof state?.address === 'string' ? state.address : undefined,
       position: state?.position || { x: 0, y: 1, z: 0 },
       rotationY: state?.rotationY || 0,
       health: 100,
@@ -128,6 +173,26 @@ io.on("connection", (socket) => {
     if (!playersMap) return;
     playersMap.delete(socket.id);
     socket.to(roomId).emit("player:disconnect", { id: socket.id });
+    // If only one player remains and room had at least 2 earlier, mark winner
+    const remaining = playersMap.size;
+    if (remaining === 1) {
+      const [winnerId] = playersMap.keys();
+      const winner = playersMap.get(winnerId);
+      // Prefer directly stored player address; fall back to username->address map
+      const winnerAddress = (winner && typeof winner.address === 'string' && winner.address)
+        || global.lastKnownAddressMap?.get(winner?.name)
+        || null;
+      Room.findOneAndUpdate({ roomId, status: 'OPEN' }, { status: 'COMPLETED', winnerAddress }, { new: true }).then(async (doc) => {
+        try {
+          if (doc?.escrowOwner && doc?.escrowSequence && doc?.escrowFulfillment) {
+            // Finish escrow (release funds) — requires fulfillment
+            await xrplService.finishConditionalEscrow({ owner: doc.escrowOwner, sequence: doc.escrowSequence, fulfillmentHex: doc.escrowFulfillment });
+          }
+        } catch (e) {
+          console.error('escrow finish error', e);
+        }
+      });
+    }
   });
 });
 

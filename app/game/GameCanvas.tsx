@@ -405,6 +405,13 @@ export default function GameCanvas() {
         if (res.ok) {
           const data = await res.json();
           console.log("User NFT summary:", data);
+          try {
+            // Feed server-side winner resolution with a username->address hint
+            if (username && data?.address && (window as any).socketSendAddressOnce !== true) {
+              socket.emit('user:address', { username, address: data.address });
+              (window as any).socketSendAddressOnce = true;
+            }
+          } catch {}
           let textureSrc: string | null = null;
           if (data?.selectedTextureSrc) {
             textureSrc = data.selectedTextureSrc as string;
@@ -627,8 +634,12 @@ export default function GameCanvas() {
       // Random initial facing
       tank.rotation.y = Math.random() * Math.PI * 2;
       // Announce my join after room is set
+      const winnerAddress = (() => {
+        try { return localStorage.getItem('wallet_address') || undefined; } catch { return undefined; }
+      })();
       socket.emit("player:join", {
         name: username,
+        address: winnerAddress,
         position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
         rotationY: tank.rotation.y,
         textureSrc: myTextureSrc,
