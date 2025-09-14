@@ -1,0 +1,39 @@
+{
+  "name": "xrpl-game-sdk",
+  "version": "1.0.0",
+  "description": "Developer-friendly SDK for integrating XRPL features (NFTs, Escrows, RLUSD, DIDs) into games and applications",
+  "main": "xrpl-game-sdk.js",
+  "scripts": {
+    "examples:full": "node examples.js",
+    "examples:nft": "node -e \"require('./examples').quickStartNFT()\"",
+    "examples:payment": "node -e \"require('./examples').quickStartPayment()\"",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "xrpl",
+    "xrp",
+    "ripple",
+    "nft",
+    "escrow",
+    "rlusd",
+    "did",
+    "blockchain",
+    "gaming",
+    "sdk",
+    "web3"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "xrpl": "^3.0.0"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/xrpl-game-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/xrpl-game-sdk/issues"
+  },
+  "homepage": "https://github.com/yourusername/xrpl-game-sdk#readme"
+}
