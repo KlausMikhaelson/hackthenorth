@@ -356,6 +356,7 @@ export default function GameCanvas() {
 
     // Socket.io client
     const socketUrl = "https://hackthenorth.onrender.com";
+    // const socketUrl = 'http://localhost:3002';
     const socket = io(socketUrl);
     socketRef.current = socket;
     socket.on("connect", () => setConnected(true));
@@ -396,7 +397,8 @@ export default function GameCanvas() {
       try {
         const addr = localStorage.getItem("wallet_address");
         if (!addr) return;
-        const apiBase = "https://hackthenorth.onrender.com";
+        // const apiBase = "https://hackthenorth.onrender.com";
+        const apiBase = 'http://localhost:3002';
         const res = await fetch(`${apiBase}/api/user/byAddress/${addr}`);
         if (res.ok) {
           const data = await res.json();
@@ -577,12 +579,46 @@ export default function GameCanvas() {
 
     window.addEventListener("click", fireBullet);
 
-    // Announce my join once socket is ready
-    socket.emit("player:join", {
-      name: username,
-      position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
-      rotationY: tank.rotation.y,
-      textureSrc: myTextureSrc,
+    // Room join UI (simple prompt modal)
+    const roomId = (typeof window !== 'undefined' ? (localStorage.getItem('room_id') || prompt('Enter Room ID (or type new ID to create):', 'public') || 'public') : 'public');
+    if (typeof window !== 'undefined') localStorage.setItem('room_id', roomId);
+    socket.emit('room:join', { roomId });
+    socket.once('room:joined', () => {
+      // Compute a random spawn near the center, avoiding overlap with others if possible
+      const SPAWN_RADIUS = 25; // small radius from center
+      function pickSpawn() {
+        // Uniform random point in a disk
+        const r = Math.sqrt(Math.random()) * SPAWN_RADIUS;
+        const a = Math.random() * Math.PI * 2;
+        const x = r * Math.cos(a);
+        const z = r * Math.sin(a);
+        return new THREE.Vector3(x, 1, z);
+      }
+      function isFarFromOthers(p: THREE.Vector3) {
+        let ok = true;
+        otherPlayers.forEach((e) => {
+          const dx = e.tank.position.x - p.x;
+          const dz = e.tank.position.z - p.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < 25) ok = false; // at least 5 units away
+        });
+        return ok;
+      }
+      let spawn = pickSpawn();
+      for (let i = 0; i < 20; i++) {
+        if (isFarFromOthers(spawn)) break;
+        spawn = pickSpawn();
+      }
+      tank.position.set(spawn.x, spawn.y, spawn.z);
+      // Random initial facing
+      tank.rotation.y = Math.random() * Math.PI * 2;
+      // Announce my join after room is set
+      socket.emit("player:join", {
+        name: username,
+        position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
+        rotationY: tank.rotation.y,
+        textureSrc: myTextureSrc,
+      });
     });
 
     // Lock orbit distance to current camera distance from tank

@@ -18,6 +18,7 @@ export default function SignupPage() {
     if (!username.trim()) return;
     try {
       const apiBase = 'https://hackthenorth.onrender.com';
+      // const apiBase = 'http://localhost:3002';
       const res = await fetch(`${apiBase}/api/user/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

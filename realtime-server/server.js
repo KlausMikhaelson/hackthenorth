@@ -39,16 +39,29 @@ const io = new Server(httpServer, {
 
 global.io = io;
 
-// In-memory registry of connected players
-// Structure: id -> { id, name, position: {x,y,z}, rotationY, health, score, textureSrc }
-const players = new Map();
+// In-memory registry of connected players, scoped by room
+// Structure: roomId -> Map(socketId -> { id, name, position, rotationY, health, score, textureSrc })
+const roomPlayers = new Map();
 
 io.on("connection", (socket) => {
-  // Send current players to the newly connected client
-  socket.emit("players:state", Array.from(players.values()));
+  // Join a room first
+  socket.on("room:join", ({ roomId }) => {
+    if (!roomId || typeof roomId !== "string") return;
+    socket.join(roomId);
+    socket.data.roomId = roomId;
+    if (!roomPlayers.has(roomId)) roomPlayers.set(roomId, new Map());
+    // Send existing players in this room only
+    const players = Array.from(roomPlayers.get(roomId).values());
+    socket.emit("players:state", players);
+    socket.emit("room:joined", { roomId });
+  });
 
-  // Handle join with initial state from client
+  // Handle join with initial state from client (after room join)
   socket.on("player:join", (state) => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const playersMap = roomPlayers.get(roomId) || new Map();
+    roomPlayers.set(roomId, playersMap);
     const player = {
       id: socket.id,
       name: state?.name || "Guest",
@@ -58,48 +71,63 @@ io.on("connection", (socket) => {
       score: 0,
       textureSrc: state?.textureSrc || null,
     };
-    players.set(socket.id, player);
-    socket.broadcast.emit("player:join", player);
+    playersMap.set(socket.id, player);
+    socket.to(roomId).emit("player:join", player);
   });
 
   socket.on("player:update", (state) => {
-    const existing = players.get(socket.id);
-    if (existing) {
-      if (state?.position) existing.position = state.position;
-      if (typeof state?.rotationY === "number") existing.rotationY = state.rotationY;
-      if (state?.name) existing.name = state.name;
-      if (typeof state?.health === "number") existing.health = state.health;
-      if (typeof state?.score === "number") existing.score = state.score;
-      if (typeof state?.textureSrc === "string") existing.textureSrc = state.textureSrc;
-      players.set(socket.id, existing);
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const playersMap = roomPlayers.get(roomId);
+    if (playersMap) {
+      const existing = playersMap.get(socket.id);
+      if (existing) {
+        if (state?.position) existing.position = state.position;
+        if (typeof state?.rotationY === "number") existing.rotationY = state.rotationY;
+        if (state?.name) existing.name = state.name;
+        if (typeof state?.health === "number") existing.health = state.health;
+        if (typeof state?.score === "number") existing.score = state.score;
+        if (typeof state?.textureSrc === "string") existing.textureSrc = state.textureSrc;
+        playersMap.set(socket.id, existing);
+      }
     }
-    socket.broadcast.emit("player:update", { id: socket.id, ...state });
+    socket.to(roomId).emit("player:update", { id: socket.id, ...state });
   });
 
   socket.on("bullet:fire", (bullet) => {
-    socket.broadcast.emit("bullet:fire", { id: socket.id, ...bullet });
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    socket.to(roomId).emit("bullet:fire", { id: socket.id, ...bullet });
   });
 
   // Client tells server a hit happened; server updates health and broadcasts
   socket.on("player:hit", ({ targetId, damage }) => {
-    const target = players.get(targetId);
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const playersMap = roomPlayers.get(roomId);
+    if (!playersMap) return;
+    const target = playersMap.get(targetId);
     if (!target) return;
     const dmg = typeof damage === "number" && damage > 0 ? damage : 10;
     target.health = Math.max(0, (target.health ?? 100) - dmg);
-    players.set(targetId, target);
-    io.emit("player:health", { id: targetId, health: target.health });
-    // Award score to shooter and broadcast
-    const shooter = players.get(socket.id);
+    playersMap.set(targetId, target);
+    io.to(roomId).emit("player:health", { id: targetId, health: target.health });
+    // Award score to shooter and broadcast within room
+    const shooter = playersMap.get(socket.id);
     if (shooter) {
       shooter.score = (shooter.score ?? 0) + 1;
-      players.set(socket.id, shooter);
-      io.emit("player:score", { id: socket.id, score: shooter.score });
+      playersMap.set(socket.id, shooter);
+      io.to(roomId).emit("player:score", { id: socket.id, score: shooter.score });
     }
   });
 
   socket.on("disconnect", () => {
-    players.delete(socket.id);
-    socket.broadcast.emit("player:disconnect", { id: socket.id });
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    const playersMap = roomPlayers.get(roomId);
+    if (!playersMap) return;
+    playersMap.delete(socket.id);
+    socket.to(roomId).emit("player:disconnect", { id: socket.id });
   });
 });
 
