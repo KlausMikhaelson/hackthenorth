@@ -7,6 +7,8 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "mongoose": "^8.18.1",
+    "socket.io": "^4.8.1"
     "@prisma/client": "^6.16.1",
     "axios": "^1.12.1",
     "dotenv": "^17.2.2",

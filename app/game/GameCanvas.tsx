@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { io, Socket } from "socket.io-client";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useRouter } from "next/navigation";
 // Physics removed; simple kinematics only
 
@@ -66,6 +67,15 @@ export default function GameCanvas() {
     camera.position.set(0, 10, 18);
     camera.lookAt(0, 0, 0);
     const cameraOffset = new THREE.Vector3(0, 6, 12);
+
+    // Orbit controls (disabled zoom/pan, only rotate around player)
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableZoom = false;
+    controls.enablePan = false;
+    controls.enableDamping = true;
+    // Prevent looking below the ground plane (tweak as desired)
+    controls.minPolarAngle = 0.1; // slightly above straight up
+    controls.maxPolarAngle = Math.PI / 2 - 0.05; // just above horizon
 
     // Environment cube map from public/texture
     (function loadEnvironment() {
@@ -344,6 +354,14 @@ export default function GameCanvas() {
       rotationY: tank.rotation.y,
     });
 
+    // Lock orbit distance to current camera distance from tank
+    const initialOrbitDistance = () => {
+      const d = camera.position.distanceTo(tank.position);
+      controls.minDistance = d;
+      controls.maxDistance = d;
+    };
+    initialOrbitDistance();
+
     function tick() {
       const now = performance.now();
       const dt = Math.min((now - lastTime) / 1000, 0.05);
@@ -454,14 +472,9 @@ export default function GameCanvas() {
         entity.healthBarFg.position.x = entity.healthBarBg.position.x - (1 - scale) * 1.0;
       });
 
-      // Chase camera: follow behind tank with smoothing
-      const behind = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), tank.rotation.y);
-      const desired = new THREE.Vector3().copy(tank.position).add(new THREE.Vector3(behind.x * cameraOffset.z, cameraOffset.y, behind.z * cameraOffset.z));
-      // Smooth factor based on dt
-      const alpha = 1 - Math.pow(0.001, dt);
-      camera.position.lerp(desired, alpha);
-      const lookAtTarget = new THREE.Vector3(tank.position.x, tank.position.y + 1, tank.position.z);
-      camera.lookAt(lookAtTarget);
+      // Orbit controls: keep target on the player and update
+      controls.target.copy(tank.position);
+      controls.update();
 
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
