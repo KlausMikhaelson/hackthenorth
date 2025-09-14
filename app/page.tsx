@@ -54,7 +54,7 @@ export default function Home() {
           </div>
           <div className="relative">
             <div className="aspect-[4/3] w-full rounded-2xl bg-slate-800/60 border border-slate-700 backdrop-blur-sm flex items-center justify-center overflow-hidden">
-              <Image className="dark:invert opacity-80" src="/next.svg" alt="Logo" width={220} height={48} />
+              <Image className="dark:invert opacity-80 h-full w-full" src="/image.png" alt="Logo" width={220} height={220} />
             </div>
           </div>
         </section>

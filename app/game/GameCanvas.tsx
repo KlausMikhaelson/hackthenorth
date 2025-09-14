@@ -197,6 +197,46 @@ export default function GameCanvas() {
       loader.load(gltf, (g) => addTrees(g.scene || (g as any)));
     })();
 
+    // Add scattered stones from public/models
+    (function addStones() {
+      const loader = new GLTFLoader();
+      const gltf = "/models/stone/scene.gltf";
+      const coords: Array<[number, number]> = [
+        [-85, -70], [-65, -45], [-40, -60], [-20, -80], [5, -70], [30, -55], [60, -65], [80, -40],
+        [-80, 40], [-55, 60], [-30, 75], [-5, 65], [20, 80], [45, 55], [70, 70], [85, 45],
+        [-90, 0], [-60, 0], [-30, 0], [0, -30], [0, 30], [30, 0], [60, 0], [90, 0],
+      ];
+      // Pull stones further inward toward center and add a few central placements
+      const inward = 0.45;
+      const clampInside = (v: number, limit = 90) => Math.max(-limit, Math.min(limit, v));
+      const positions = [
+        ...coords.map(([x, z]) => new THREE.Vector3(clampInside(x * inward), 0, clampInside(z * inward))),
+        new THREE.Vector3(-25, 0, -15),
+        new THREE.Vector3(0, 0, -20),
+        new THREE.Vector3(22, 0, -10),
+        new THREE.Vector3(-18, 0, 12),
+        new THREE.Vector3(6, 0, 18),
+        new THREE.Vector3(26, 0, 6),
+        new THREE.Vector3(-8, 0, -6),
+        new THREE.Vector3(12, 0, 0),
+        new THREE.Vector3(-12, 0, 2),
+      ];
+      // Reduce total count a bit (~60% kept)
+      const selectedPositions = positions.filter((_, i) => (i % 5 !== 1 && i % 5 !== 3));
+      const placeStones = (root: THREE.Object3D) => {
+        selectedPositions.forEach((p) => {
+          const obj = root.clone(true);
+          obj.position.set(p.x, 0, p.z);
+          // Make stones ~25% smaller than previous range
+          const s = 0.01125 + Math.random() * 0.01875; // ~0.011–0.03
+          obj.scale.set(s, s, s);
+          obj.rotation.y = Math.random() * Math.PI * 2;
+          scene.add(obj);
+        });
+      };
+      loader.load(gltf, (g) => placeStones(g.scene || (g as any)));
+    })();
+
     // Tank (cube)
     const tankGeo = new THREE.BoxGeometry(2, 2, 2);
     const tankDefaultMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8 });
