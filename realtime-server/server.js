@@ -5,6 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const nftRoutes = require("./src/routes/nft.routes");
 const userRoutes = require("./src/routes/user.routes");
+const assetsRoutes = require("./src/routes/assets.routes");
 const xrplService = require("./src/services/xrpl.service");
 const mongoose = require("mongoose");
 const path = require("path");
@@ -24,6 +25,7 @@ app.use(cors({ origin: true, credentials: true }));
 app.set("etag", false);
 app.use("/api/nft", nftRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/assets", assetsRoutes);
 
 app.get("/health", (req, res) => {
   res.send("ok");
@@ -38,7 +40,7 @@ const io = new Server(httpServer, {
 global.io = io;
 
 // In-memory registry of connected players
-// Structure: id -> { id, name, position: {x,y,z}, rotationY, health, score }
+// Structure: id -> { id, name, position: {x,y,z}, rotationY, health, score, textureSrc }
 const players = new Map();
 
 io.on("connection", (socket) => {
@@ -54,6 +56,7 @@ io.on("connection", (socket) => {
       rotationY: state?.rotationY || 0,
       health: 100,
       score: 0,
+      textureSrc: state?.textureSrc || null,
     };
     players.set(socket.id, player);
     socket.broadcast.emit("player:join", player);
@@ -67,6 +70,7 @@ io.on("connection", (socket) => {
       if (state?.name) existing.name = state.name;
       if (typeof state?.health === "number") existing.health = state.health;
       if (typeof state?.score === "number") existing.score = state.score;
+      if (typeof state?.textureSrc === "string") existing.textureSrc = state.textureSrc;
       players.set(socket.id, existing);
     }
     socket.broadcast.emit("player:update", { id: socket.id, ...state });

@@ -11,10 +11,8 @@ type Assets = {
   selectedTankType: string | null;
 };
 
-const TEXTURE_OPTIONS = [
-  { id: "tank-top-texture-green.png", label: "Green Top", src: "/textures/tank-top-texture-green.png" },
-  { id: "war-tank-with-armed-equipment-used-combat.jpg", label: "War Tank", src: "/textures/war-tank-with-armed-equipment-used-combat.jpg" },
-];
+// Loaded dynamically from server
+type TextureOption = { id: string; label: string; src: string };
 
 const TANK_TYPES = [
   { id: "cube", label: "Cube" },
@@ -24,15 +22,15 @@ const TANK_TYPES = [
 export default function StorePage() {
   const [address, setAddress] = useState<string>("");
   const [assets, setAssets] = useState<Assets | null>(null);
+  const [options, setOptions] = useState<TextureOption[]>([]);
   const [saving, setSaving] = useState(false);
   const apiBase = (process.env.NEXT_PUBLIC_REALTIME_URL || process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3002").replace(/\/$/, "");
 
   useEffect(() => {
     const addr = localStorage.getItem("wallet_address") || "";
     setAddress(addr);
-    if (addr) {
-      void loadAssets(addr);
-    }
+    if (addr) void loadAssets(addr);
+    void loadTextureOptions();
   }, []);
 
   async function loadAssets(addr: string) {
@@ -41,6 +39,16 @@ export default function StorePage() {
       if (res.ok) {
         const data = await res.json();
         setAssets(data);
+      }
+    } catch {}
+  }
+
+  async function loadTextureOptions() {
+    try {
+      const res = await fetch(`${apiBase}/api/assets/textures`);
+      if (res.ok) {
+        const data = await res.json();
+        setOptions(data);
       }
     } catch {}
   }
@@ -67,7 +75,7 @@ export default function StorePage() {
       await fetch(`${apiBase}/api/nft/mintForUser`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, sku: texId, metadata: { image: `/textures/${texId}` } }),
+        body: JSON.stringify({ address, username, sku: texId, metadata: { image: `/textures/${texId}` } }),
       });
     } finally {
       setSaving(false);
@@ -109,7 +117,7 @@ export default function StorePage() {
             <section>
               <h2 className="text-xl font-semibold mb-4">Select Texture</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {TEXTURE_OPTIONS.map((t) => {
+                {options.map((t) => {
                   const active = assets?.selectedTexture === t.id;
                   return (
                     <button key={t.id} onClick={() => selectTexture(t.id)} className={`rounded-xl overflow-hidden border ${active ? "border-sky-400" : "border-slate-700"} bg-slate-800/50 hover:border-slate-500 text-left`}>

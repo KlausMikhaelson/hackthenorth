@@ -6,15 +6,17 @@ import * as THREE from "three";
 import { io, Socket } from "socket.io-client";
 import { useRouter } from "next/navigation";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 // Physics removed; simple kinematics only
 
 type PlayerState = {
   id: string;
   name: string;
-  position: { x: number; y: number; z: number };
-  rotationY: number;
+  position?: { x: number; y: number; z: number };
+  rotationY?: number;
   health?: number;
   score?: number;
+  textureSrc?: string | null;
 };
 
 type Bullet = {
@@ -114,16 +116,90 @@ export default function GameCanvas() {
     scene.add(dir);
 
     // Ground
-    const groundGeo = new THREE.PlaneGeometry(60, 60);
+    const GROUND_SIZE = 200;
+    const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
 
+    // Apply repeating grass texture to ground
+    (function applyGroundTexture() {
+      const loader = new THREE.TextureLoader();
+      const tiles = Math.max(1, Math.floor(GROUND_SIZE / 2)); // how many repeats across the plane
+      const setTex = (tex: THREE.Texture) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(tiles, tiles);
+        const mat = new THREE.MeshStandardMaterial({ map: tex });
+        ground.material = mat;
+      };
+      loader.load(
+        "/textures/green-grass.png",
+        (tex) => setTex(tex),
+        undefined,
+        () => {
+          // fallback to jpg if png missing
+          loader.load(
+            "/textures/green-grass.jpg",
+            (tex) => setTex(tex)
+          );
+        }
+      );
+    })();
+
+    // Build boundary walls around the map to match ground size
+    (function buildWalls() {
+      const WALL_HEIGHT = 4;
+      const WALL_THICKNESS = 1;
+      const half = GROUND_SIZE / 2;
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x374151 });
+
+      // North/South walls (along X axis)
+      const nsGeo = new THREE.BoxGeometry(GROUND_SIZE, WALL_HEIGHT, WALL_THICKNESS);
+      const north = new THREE.Mesh(nsGeo, wallMat);
+      north.position.set(0, WALL_HEIGHT / 2, -half);
+      const south = new THREE.Mesh(nsGeo, wallMat);
+      south.position.set(0, WALL_HEIGHT / 2, half);
+
+      // East/West walls (along Z axis)
+      const ewGeo = new THREE.BoxGeometry(WALL_THICKNESS, WALL_HEIGHT, GROUND_SIZE);
+      const east = new THREE.Mesh(ewGeo, wallMat);
+      east.position.set(half, WALL_HEIGHT / 2, 0);
+      const west = new THREE.Mesh(ewGeo, wallMat);
+      west.position.set(-half, WALL_HEIGHT / 2, 0);
+
+      scene.add(north, south, east, west);
+    })();
+
+    // Add cherry tree models from public/models
+    (function addCherryTrees() {
+      const loader = new GLTFLoader();
+      const gltf = "/models/cherry_tree/scene.gltf";
+      const positions = [
+        new THREE.Vector3(30, 0, 30),
+        new THREE.Vector3(-30, 0, 30),
+        new THREE.Vector3(30, 0, -30),
+        new THREE.Vector3(-30, 0, -30),
+        new THREE.Vector3(0, 0, 45),
+        new THREE.Vector3(45, 0, 0),
+      ];
+      const addTrees = (root: THREE.Object3D) => {
+        positions.forEach((p) => {
+          const obj = root.clone(true);
+          obj.position.set(p.x, 0, p.z);
+          obj.scale.set(2, 2, 2);
+          scene.add(obj);
+        });
+      };
+      loader.load(gltf, (g) => addTrees(g.scene || (g as any)));
+    })();
+
     // Tank (cube)
     const tankGeo = new THREE.BoxGeometry(2, 2, 2);
-    const tankMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8 });
-    const tank = new THREE.Mesh(tankGeo, tankMat);
+    const tankDefaultMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8 });
+    const tank = new THREE.Mesh(tankGeo, tankDefaultMat);
     tank.position.set(0, 1, 0);
     scene.add(tank);
 
@@ -213,6 +289,35 @@ export default function GameCanvas() {
     socket.on("disconnect", () => setConnected(false));
 
     const username = getUsername();
+    let myTextureSrc: string | null = null;
+    // Helper: apply a texture to all 4 side faces of the tank (±X, ±Z)
+    function applySideTextures(mesh: THREE.Mesh, textureSrc: string) {
+      const loader = new THREE.TextureLoader();
+      loader.load(
+        textureSrc,
+        (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+          // Create 6 materials for box faces
+          // Indices: 0:+X, 1:-X, 2:+Y (top), 3:-Y (bottom), 4:+Z, 5:-Z
+          const faceMats: THREE.MeshStandardMaterial[] = [
+            new THREE.MeshStandardMaterial({ map: tex }), // +X
+            new THREE.MeshStandardMaterial({ map: tex }), // -X
+            new THREE.MeshStandardMaterial({ map: tex }), // +Y (top)
+            new THREE.MeshStandardMaterial({ color: 0x38bdf8 }), // -Y (bottom)
+            new THREE.MeshStandardMaterial({ map: tex }), // +Z
+            new THREE.MeshStandardMaterial({ map: tex }), // -Z
+          ];
+          mesh.material = faceMats;
+        },
+        undefined,
+        () => {
+          // ignore load errors silently
+        }
+      );
+    }
+
     // Fetch wallet-address bound user NFTs for texture decisions
     (async () => {
       try {
@@ -223,11 +328,21 @@ export default function GameCanvas() {
         if (res.ok) {
           const data = await res.json();
           console.log("User NFT summary:", data);
-          if (Array.isArray(data.nfts) && data.nfts.length > 0) {
-            const primary = data.nfts[0];
-            console.log("Primary tank mapping -> shape:", primary.shape, "name:", primary.name);
+          let textureSrc: string | null = null;
+          if (data?.selectedTextureSrc) {
+            textureSrc = data.selectedTextureSrc as string;
+          } else if (data?.selectedNFT?.name && typeof data.selectedNFT.name === "string") {
+            textureSrc = data.selectedNFT.name as string;
+          } else if (Array.isArray(data.nfts) && data.nfts.length > 0 && typeof data.nfts[0]?.name === "string") {
+            textureSrc = data.nfts[0].name as string;
+          }
+          if (textureSrc) {
+            applySideTextures(tank, textureSrc);
+            myTextureSrc = textureSrc;
+            // Broadcast my selected texture so others can see it
+            socket.emit("player:update", { textureSrc });
           } else {
-            console.log("No NFTs found for user address.");
+            console.log("No texture selected or available for user.");
           }
         }
       } catch {}
@@ -238,9 +353,12 @@ export default function GameCanvas() {
       existing.forEach((p) => {
         if (p.id === socket.id) return;
         if (!otherPlayers.get(p.id)) {
-          const mesh = new THREE.Mesh(tankGeo, tankMat);
-          mesh.position.set(p.position.x, p.position.y, p.position.z);
-          mesh.rotation.y = p.rotationY;
+          const mesh = new THREE.Mesh(tankGeo, tankDefaultMat);
+          const px = p.position?.x ?? 0;
+          const py = p.position?.y ?? 1;
+          const pz = p.position?.z ?? 0;
+          mesh.position.set(px, py, pz);
+          mesh.rotation.y = p.rotationY ?? 0;
           const nameSprite = createNameSprite(p.name || "Player");
           const { bg, fg } = createHealthBar();
           scene.add(mesh);
@@ -249,6 +367,9 @@ export default function GameCanvas() {
           scene.add(fg);
           const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0 };
           otherPlayers.set(p.id, entity);
+          if (p.textureSrc) {
+            applySideTextures(mesh, p.textureSrc);
+          }
         }
       });
     });
@@ -256,9 +377,12 @@ export default function GameCanvas() {
     socket.on("player:join", (p: PlayerState) => {
       if (p.id === socket.id) return;
       if (!otherPlayers.get(p.id)) {
-        const mesh = new THREE.Mesh(tankGeo, tankMat);
-        mesh.position.set(p.position.x, p.position.y, p.position.z);
-        mesh.rotation.y = p.rotationY;
+        const mesh = new THREE.Mesh(tankGeo, tankDefaultMat);
+        const px = p.position?.x ?? 0;
+        const py = p.position?.y ?? 1;
+        const pz = p.position?.z ?? 0;
+        mesh.position.set(px, py, pz);
+        mesh.rotation.y = p.rotationY ?? 0;
         const nameSprite = createNameSprite(p.name || "Player");
         const { bg, fg } = createHealthBar();
         scene.add(mesh);
@@ -267,6 +391,9 @@ export default function GameCanvas() {
         scene.add(fg);
         const entity: PlayerEntity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: p.health ?? 100, score: p.score ?? 0 };
         otherPlayers.set(p.id, entity);
+        if (p.textureSrc) {
+          applySideTextures(mesh, p.textureSrc);
+        }
       }
     });
 
@@ -275,7 +402,7 @@ export default function GameCanvas() {
       if (id === socket.id) return;
       let entity = otherPlayers.get(id);
       if (!entity) {
-        const mesh = new THREE.Mesh(tankGeo, tankMat);
+        const mesh = new THREE.Mesh(tankGeo, tankDefaultMat);
         const nameSprite = createNameSprite(payload.name || "Player");
         const { bg, fg } = createHealthBar();
         scene.add(mesh);
@@ -285,8 +412,15 @@ export default function GameCanvas() {
         entity = { tank: mesh, nameSprite, healthBarBg: bg, healthBarFg: fg, health: payload.health ?? 100 };
         otherPlayers.set(id, entity);
       }
-      entity.tank.position.set(position.x, position.y, position.z);
-      entity.tank.rotation.y = rotationY;
+      if (position) {
+        entity.tank.position.set(position.x, position.y, position.z);
+      }
+      if (typeof rotationY === "number") {
+        entity.tank.rotation.y = rotationY;
+      }
+      if (payload.textureSrc) {
+        applySideTextures(entity.tank, payload.textureSrc);
+      }
     });
 
     socket.on("player:disconnect", ({ id }: { id: string }) => {
@@ -353,7 +487,7 @@ export default function GameCanvas() {
         id: `${socket.id}-${Date.now()}`,
         position: { x: origin.x, y: origin.y, z: origin.z },
         velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
-        lifeMs: 2000,
+        lifeMs: 8000,
         shooterId: socket.id,
       };
       const mesh = new THREE.Mesh(bulletGeo, bulletMat);
@@ -372,6 +506,7 @@ export default function GameCanvas() {
       name: username,
       position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
       rotationY: tank.rotation.y,
+      textureSrc: myTextureSrc,
     });
 
     // Lock orbit distance to current camera distance from tank
@@ -466,7 +601,8 @@ export default function GameCanvas() {
         b.position.y += b.velocity.y * dt;
         b.position.z += b.velocity.z * dt;
         bulletMeshes[i].position.set(b.position.x, b.position.y, b.position.z);
-        const outOfBounds = Math.abs(b.position.x) > 32 || b.position.y < 0 || Math.abs(b.position.z) > 32;
+        const BOUND = GROUND_SIZE / 2 - 2;
+        const outOfBounds = Math.abs(b.position.x) > BOUND || b.position.y < -1 || Math.abs(b.position.z) > BOUND;
         if (b.lifeMs <= 0 || outOfBounds) {
           bullets.splice(i, 1);
           const m = bulletMeshes.splice(i, 1)[0];
@@ -479,6 +615,8 @@ export default function GameCanvas() {
         name: username,
         position: { x: tank.position.x, y: tank.position.y, z: tank.position.z },
         rotationY: tank.rotation.y,
+        // Only include texture if we have one and this is the first broadcast after selection
+        // (we already sent a one-off update when it was fetched)
       });
 
       // Position other players' overlays

@@ -90,7 +90,16 @@ router.get('/byAddress/:address', async (req, res) => {
     }
 
     const mapped = Array.from(nftsByToken.values());
-    res.json({ username: user.username, address: user.address, nfts: mapped });
+    // Include user asset selections
+    const assets = await UserAsset.findOne({ address }).lean();
+    const selectedTexture = assets?.selectedTexture || null;
+    const selectedTankType = assets?.selectedTankType || null;
+    const selectedTextureSrc = selectedTexture ? `/textures/${selectedTexture}` : null;
+    // Best-effort selected NFT match by texture path
+    const selectedNFT = selectedTextureSrc
+      ? mapped.find((n) => typeof n?.name === 'string' && n.name.includes(selectedTextureSrc)) || null
+      : null;
+    res.json({ username: user.username, address: user.address, nfts: mapped, selectedTexture, selectedTextureSrc, selectedTankType, selectedNFT });
   } catch (e) {
     console.error('byAddress error', e);
     res.status(500).json({ error: e.message });
